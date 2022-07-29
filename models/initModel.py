@@ -35,7 +35,7 @@ def initModelPara(model, initType):
 def loadStackHourglassOnly(model, savedDictPath):
   pretrained_dict = torch.load(savedDictPath)['state_dict']
   currentDict = model.state_dict()
-  pretrained_dict = {k: v for k, v in pretrained_dict.items() if ((k in currentDict) and ('feature_extraction' not in k) and ('forfilter1' not in k))}
+  pretrained_dict = {k: v for k, v in pretrained_dict.items() if ((k in currentDict) and ('feature_extraction' not in k) and ('forfilter1' not in k) and ('multi_view_channel_conbine' not in k))}
   currentDict.update(pretrained_dict)
   print("load partial parameter: ")
   model.load_state_dict(currentDict)
