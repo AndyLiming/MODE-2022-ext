@@ -166,3 +166,41 @@ class Deep360DatasetFusion(Dataset):
 
   def __len__(self):
     return len(self.depthes[0])
+
+
+# dataloader of Deep360 for SphereSweepMODE network
+# using rgb images of 4 cameras in default projection coordinates
+class Deep360DatasetSsmode(Dataset):
+  def __init__(self, rgbs, gt, resize, depthloader=depth_loader, rgbloader=default_loader):
+    # Initialization
+    super(Deep360DatasetSsmode, self).__init__()
+    self.rgbs = rgbs
+    self.gt = gt
+    self.depthloader = depthloader
+    self.rgbloader = rgbloader
+    self.resize = resize
+
+  def __getitem__(self, index):
+    rgbs = []
+    for rgb in self.rgbs:
+      rgbs.append(self.rgbloader(rgb[index]))
+    gt = self.depthloader(self.gt[index])
+    gt = np.squeeze(gt, axis=-1)
+    gt = np.ascontiguousarray(gt, dtype=np.float32)
+
+    if self.resize:
+      w, h = rgbs[0].size
+      for i, rgb in enumerate(rgbs):
+        rgbs[i] = rgb.resize((int(w / 2), int(h / 2)))
+      if self.training:
+        gt = gt[::2, ::2]
+
+    processed = preprocess.get_transform_stage1(augment=False)
+    for i, rgb in enumerate(rgbs):
+      rgbs[i] = processed(rgb)
+    gt = torch.from_numpy(gt).unsqueeze(0)
+    data = {'rgbImgs': rgbs, 'depthMap': gt}
+    return data
+
+  def __len__(self):
+    return len(self.gt)

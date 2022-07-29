@@ -1,5 +1,4 @@
 import os
-
 """
 NOTE:
 
@@ -26,6 +25,7 @@ Deep360
 +-- ep6_500frames
 
 """
+
 
 def list_deep360_disparity_train(filepath, soiled):
 
@@ -265,3 +265,83 @@ def list_deep360_fusion_test(input_path, dataset_path, soil):
   test_confs = [test_12_conf, test_13_conf, test_14_conf, test_23_conf, test_24_conf, test_34_conf]
   test_rgbs = [test_rgb1, test_rgb2, test_rgb3, test_rgb4]
   return test_depthes, test_confs, test_rgbs, test_gt
+
+
+# list files for SphereSweepMODE
+def list_deep360_ssmode_train(dataset_path, soiled):
+  train_rgb1 = []
+  train_rgb2 = []
+  train_rgb3 = []
+  train_rgb4 = []
+  train_gt = []
+
+  val_rgb1 = []
+  val_rgb2 = []
+  val_rgb3 = []
+  val_rgb4 = []
+  val_gt = []
+
+  ep_list = ["ep%d_500frames" % i for i in range(1, 7)]
+  for ep in ep_list:
+    for subset in ['training', 'validation']:
+      if soiled:
+        rgb_path = os.path.join(dataset_path, ep, subset, "rgb_soiled")
+      else:
+        rgb_path = os.path.join(dataset_path, ep, subset, "rgb")
+      depth_path = os.path.join(dataset_path, ep, subset, "depth")
+
+      rgb_name_list = os.listdir(rgb_path)
+      rgb_name_list.sort()
+      depth_name_list = os.listdir(depth_path)
+      depth_name_list.sort()
+
+      if subset == 'training':
+        for frame in range(len(depth_name_list)):
+          train_rgb1.append(os.path.join(rgb_path, rgb_name_list[frame * 12]))
+          train_rgb2.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 1]))
+          train_rgb3.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 10]))
+          train_rgb4.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 11]))
+          train_gt.append(os.path.join(depth_path, depth_name_list[frame]))
+      else:
+        for frame in range(len(depth_name_list)):
+          val_rgb1.append(os.path.join(rgb_path, rgb_name_list[frame * 12]))
+          val_rgb2.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 1]))
+          val_rgb3.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 10]))
+          val_rgb4.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 11]))
+          val_gt.append(os.path.join(depth_path, depth_name_list[frame]))
+
+  train_rgbs = [train_rgb1, train_rgb2, train_rgb3, train_rgb4]
+  val_rgbs = [val_rgb1, val_rgb2, val_rgb3, val_rgb4]
+  return train_rgbs, train_gt, val_rgbs, val_gt
+
+
+def list_deep360_ssmode_test(dataset_path, soiled):
+  test_rgb1 = []
+  test_rgb2 = []
+  test_rgb3 = []
+  test_rgb4 = []
+  test_gt = []
+
+  ep_list = ["ep%d_500frames" % i for i in range(1, 7)]
+  subset = "testing"
+  for ep in ep_list:
+    if soiled:
+      rgb_path = os.path.join(dataset_path, ep, subset, "rgb_soiled")
+    else:
+      rgb_path = os.path.join(dataset_path, ep, subset, "rgb")
+    depth_path = os.path.join(dataset_path, ep, subset, "depth")
+
+    rgb_name_list = os.listdir(rgb_path)
+    rgb_name_list.sort()
+    depth_name_list = os.listdir(depth_path)
+    depth_name_list.sort()
+
+    for frame in range(len(depth_name_list)):
+      test_gt.append(os.path.join(depth_path, depth_name_list[frame]))
+      test_rgb1.append(os.path.join(rgb_path, rgb_name_list[frame * 12]))
+      test_rgb2.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 1]))
+      test_rgb3.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 10]))
+      test_rgb4.append(os.path.join(rgb_path, rgb_name_list[frame * 12 + 11]))
+
+  test_rgbs = [test_rgb1, test_rgb2, test_rgb3, test_rgb4]
+  return test_rgbs, test_gt

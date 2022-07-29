@@ -1,2 +1,2 @@
-from .list_file import list_deep360_disparity_train, list_deep360_disparity_test, list_deep360_fusion_train, list_deep360_fusion_test
-from .deep360_loader import Deep360DatasetDisparity, Deep360DatasetFusion
+from .list_file import list_deep360_disparity_train, list_deep360_disparity_test, list_deep360_fusion_train, list_deep360_fusion_test, list_deep360_ssmode_train, list_deep360_ssmode_test
+from .deep360_loader import Deep360DatasetDisparity, Deep360DatasetFusion, Deep360DatasetSsmode
