@@ -15,8 +15,6 @@ from datetime import datetime
 import math
 import random
 import cv2
-from tensorboardX import SummaryWriter
-from torchsummary import summary
 from tqdm import tqdm
 import prettytable as pt
 
@@ -68,7 +66,7 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 
 def saveOutputOriValue(pred, gt, mask, rootDir, id, names=None, cons=True):
-  b, c, h, w = pred.shape
+  b, h, w = pred.shape
   pred[~mask] = 0
   gt[~mask] = 0
   for i in range(b):
@@ -93,8 +91,8 @@ def saveOutputOriValue(pred, gt, mask, rootDir, id, names=None, cons=True):
 
 
 def saveOutput(pred, gt, mask, rootDir, id, names=None, log=True, cons=True, savewithGt=True):
-  b, c, h, w = pred.shape
-  div = torch.ones([c, h, 10])
+  b, h, w = pred.shape
+  div = torch.ones([h, 10])
   if log:
     div = torch.log10(div * 1000 + 1.0)
     pred[mask] = torch.log10(pred[mask] + 1.0)
@@ -106,9 +104,9 @@ def saveOutput(pred, gt, mask, rootDir, id, names=None, log=True, cons=True, sav
     gtSave = gt[i, ::].cpu()
     maskSave = mask[i, ::].cpu()
     if savewithGt:
-      saveimg = torch.cat([gtSave, div, predSave], dim=2).squeeze_(0).numpy()
+      saveimg = torch.cat([gtSave, div, predSave], dim=1).numpy()
     else:
-      saveimg = predSave.squeeze_(0).numpy()
+      saveimg = predSave.numpy()
     saveimg = (saveimg - np.min(saveimg)) / (np.max(saveimg) - np.min(saveimg)) * 255
 
     saveimg = saveimg.astype(np.uint8)
@@ -119,13 +117,13 @@ def saveOutput(pred, gt, mask, rootDir, id, names=None, log=True, cons=True, sav
       if isinstance(oriName, list) or isinstance(oriName, tuple):
         oriName = oriName[0]
       oriName = oriName.replace(args.dataset_root, '')
-      oriName = oriName.replace(args.intermedia_path, '')
       oriName = oriName.replace('../', '')
       oriName = oriName.replace('./', '')
       oriName = oriName.replace('/', '+')
 
       prefix = oriName.split('.')[0]
     saveimg = cv2.applyColorMap(saveimg, cv2.COLORMAP_JET)
+    #print(os.path.join(rootDir, prefix + '.png'))
     cv2.imwrite(os.path.join(rootDir, prefix + '.png'), saveimg)
 
 
@@ -151,8 +149,10 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
       _, output_pred, __ = sphereSweep.invIndex2depth(output_pred)  # to depth
 
       # to ERP
-      output_pred = cassini2Equirec(output_pred.unsqueeze(1))
-      depthGT = cassini2Equirec(depthGT.unsqueeze(1))
+      output_pred = cassini2Equirec(output_pred)
+      depthGT = cassini2Equirec(depthGT)
+      depthGT[depthGT > args.max_depth] = args.max_depth
+      mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
       # compute errors
       eval_metrics = []
       eval_metrics.append(evaluation.mae(output_pred[mask], depthGT[mask]))
@@ -164,15 +164,15 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
       eval_metrics.append(evaluation.delta_acc(2, output_pred[mask], depthGT[mask]))
       eval_metrics.append(evaluation.delta_acc(3, output_pred[mask], depthGT[mask]))
       if save_out:
-        if args.save_ori: saveOutputOriValue(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['dispNames'])  # save npz
-        saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['dispNames'], log=True)
+        if args.save_ori: saveOutputOriValue(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'])  # save npz
+        saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'], log=True)
       total_eval_metrics += eval_metrics
     mean_errors = total_eval_metrics / len(testDispDataLoader)
     mean_errors = ['{:^.4f}'.format(x) for x in mean_errors]
   tb = pt.PrettyTable()
   tb.field_names = test_metrics
   tb.add_row(list(mean_errors))
-  print('\nTest Results on SSMODE using model {}:\n'.format(args.checkpoint_disp))
+  print('\nTest Results on SSMODE using model {}:\n'.format(args.checkpoint))
   print(tb)
 
 
@@ -183,20 +183,20 @@ def main():
     model = nn.DataParallel(model)
   if args.cuda:
     model.cuda()
-  if (args.checkpoint_disp is not None):
-    state_dict = torch.load(args.checkpoint_disp)
+  if (args.checkpoint is not None):
+    state_dict = torch.load(args.checkpoint)
     model.load_state_dict(state_dict['state_dict'])
   else:
     raise ValueError("disp model checkpoint is not defined")
 
   # data
   if args.dataset == 'Deep360':  # deep 360
-    test_left_img, test_right_img, test_left_disp = list_deep360_ssmode_test(args.dataset_root, soiled=args.soiled)
-    testDispData = Deep360DatasetSsmode(leftImgs=test_left_img, rightImgs=test_right_img, disps=test_left_disp)
+    test_rgbs, test_gt = list_deep360_ssmode_test(args.dataset_root, soiled=args.soiled)
+    testDispData = Deep360DatasetSsmode(rgbs=test_rgbs, gt=test_gt, resize=False)
     testDispDataLoader = torch.utils.data.DataLoader(testDispData, batch_size=args.batch_size, num_workers=args.batch_size, pin_memory=False, shuffle=False)
 
   # testing
-  test(model, testDispDataLoader, args.checkpoint_disp, len(testDispData))
+  test(model, testDispDataLoader, args.checkpoint, len(testDispData))
 
 
 if __name__ == '__main__':

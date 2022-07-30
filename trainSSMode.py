@@ -17,7 +17,7 @@ from datetime import datetime
 import math
 import random
 import cv2
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from models import SphereSweepMODE, loadStackHourglassOnly
@@ -33,7 +33,7 @@ Argument Definition
 parser = argparse.ArgumentParser(description='MODE Disparity estimation training')
 
 # model
-parser.add_argument('--model', default='ModeDisparity', help='select model')
+parser.add_argument('--model', default='SSMODE_sphere', help='select model')
 # data
 parser.add_argument("--dataset", default="Deep360", type=str, help="dataset name")
 parser.add_argument("--dataset_root", default="../../datasets/Deep360/", type=str, help="dataset root directory.")
@@ -247,7 +247,7 @@ if args.dataset == 'Deep360':
 # -------------------------------------------------
 
 # Define models ----------------------------------------------
-model = SphereSweepMODE(conv='Regular', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=4, numIndex=args.num_index)
+model = SphereSweepMODE(conv='Sphere', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=4, numIndex=args.num_index)
 # ----------------------------------------------------------
 if args.parallel:
   model = nn.DataParallel(model)
