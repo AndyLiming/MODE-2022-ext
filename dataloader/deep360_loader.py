@@ -199,7 +199,7 @@ class Deep360DatasetSsmode(Dataset):
     for i, rgb in enumerate(rgbs):
       rgbs[i] = processed(rgb)
     gt = torch.from_numpy(gt).unsqueeze(0)
-    data = {'rgbImgs': rgbs, 'depthMap': gt}
+    data = {'rgbImgs': rgbs, 'depthMap': gt, 'depthName': self.gt[index]}
     return data
 
   def __len__(self):
