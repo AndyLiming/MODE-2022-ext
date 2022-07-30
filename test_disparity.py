@@ -15,7 +15,7 @@ from datetime import datetime
 import math
 import random
 import cv2
-from tensorboardX import SummaryWriter
+
 from tqdm import tqdm
 import re
 import prettytable as pt

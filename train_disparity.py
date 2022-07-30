@@ -17,7 +17,7 @@ from datetime import datetime
 import math
 import random
 import cv2
-from tensorboardX import SummaryWriter
+from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm
 
 from models import ModeDisparity
