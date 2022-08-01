@@ -178,7 +178,7 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
 
 def main():
   # model
-  model = SphereSweepMODE(conv='Regular', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=4, numIndex=args.num_index)
+  model = SphereSweepMODE(conv='Sphere', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=4, numIndex=args.num_index)
   if (args.parallel):
     model = nn.DataParallel(model)
   if args.cuda:
