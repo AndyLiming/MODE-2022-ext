@@ -264,7 +264,7 @@ if (model is not None):
     else:
       if not args.loadSHGonly:  # load all parameters
         checkpoint_disp = torch.load(args.checkpoint_disp)
-        if 'state_dict' in checkpoint_disp.items():
+        if 'state_dict' in checkpoint_disp.keys():
           model.load_state_dict(checkpoint_disp['state_dict'])
         else:
           model.load_state_dict(checkpoint_disp)
