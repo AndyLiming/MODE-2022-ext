@@ -451,20 +451,8 @@ class Dataset3D60Fusion(Dataset):
 
 if __name__ == '__main__':
   from tqdm import tqdm
-  os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
-
-  # for cur in splits:
-  #   da = Multi360FusionSoiledDataset(rootDir='../../../datasets/Deep360/depth_on_1', curStage=cur)
-
-  # da = Multi360FusionSoiledDataset(rootInputDir='../outputs/depth_on_1_inter', rootDepthDir='../../../datasets/Deep360/depth_on_1', curStage='training')
-  # trainFusionDataLoader = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=True)
-  # for id, batch in enumerate(trainFusionDataLoader):
-  #   # imagePairs = batch['inputs']
-  #   # depth = batch['depthMap']
-  #   # print(batch['leftName'])
-  #   print(batch['soilMask'].shape)
-  #   print(torch.max(batch['soilMask']), torch.min(batch['soilMask']))
-  da = Dataset3D60Disparity(filenamesFile='./3d60_test.txt', rootDir='../../../datasets/3D60/', curStage='testing', shape=(512, 256), crop=False, pair='ud', flip=False, maxDepth=20.0)
+  os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
+  da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', curStage='validation', shape=(512, 256), crop=False, pair='lr', flip=False, maxDepth=20.0)
   myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
   maxDisp = 0
   for id, batch in enumerate(tqdm(myDL, desc='Train iter')):
@@ -478,6 +466,7 @@ if __name__ == '__main__':
         right = batch['rightImg_flip']
         disp = batch['dispMap_flip']
       print(disp.shape)
+      print(torch.max(left), torch.min(left), torch.max(right), torch.min(right))
       disp[torch.isnan(disp)] = 0.0
       disp[(disp > 192)] = 0.0
       print(torch.max(disp), torch.min(disp))
@@ -488,25 +477,5 @@ if __name__ == '__main__':
       torchvision.utils.save_image(right, 'ca_{}_r.png'.format(str(id)))
       torchvision.utils.save_image(disp, 'ca_{}_disp.png'.format(str(id)))
     # test output disparity
-    # print(batch['leftNames'])
-    # print(batch['leftImg'].shape)
-    # print(batch['rightImg'].shape)
-    # print(batch['dispMap'].shape)
-
-    # test output fusion
-    # print(len(batch['imgPairs']))
-    # print(batch['leftNames'])
-    # print(batch['imgPairs'][0][0].shape)
-    # print(batch['depthMap'].shape)
-    # print(batch['rgbImgs'].shape)
-    # print(batch['soilMask'].shape)
-
-    # test output inter fusion
-    # print(batch['leftImg'].shape)
-    # print(batch['rightImg'].shape)
-    # print(batch['leftNames'])
-    #print(torch.max(batch['dispMap']), torch.min(batch['dispMap']))
-    # if (torch.max(batch['dispMap']) > 192):
-    #print(batch['leftNames'])
     maxDisp = max(maxDisp, torch.max(batch['dispMap']))
   print(maxDisp)

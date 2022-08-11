@@ -1,3 +1,7 @@
+# sample script
+# deep360: python trainSSMode.py --learning_rate 0.0001 --checkpoint_disp ./checkpoints/pretrained_sceneflow.tar --loadSHGonly
+# deep360 soield: python trainSSMode.py --learning_rate 0.00001 --checkpoint_disp ./checkpoints/disp/SSMODE_sphere/Deep360/ckpt_disp_SSMODE_sphere_Deep360_55.tar --num_index 192  --batch_size 2 --save_checkpoint_path ./checkpoints/soiled --soiled --epochs 40 > logTrainSsmodeSoiled.txt
+
 from __future__ import print_function
 import os
 import sys
@@ -24,7 +28,7 @@ from models import ModeDisparity
 from models import initModelPara, loadStackHourglassOnly
 
 from utils import evaluation
-from dataloader import list_deep360_disparity_train, Deep360DatasetDisparity
+from dataloader import list_deep360_disparity_train, Deep360DatasetDisparity, Dataset3D60Disparity
 '''
 Argument Definition
 '''
@@ -34,8 +38,11 @@ parser = argparse.ArgumentParser(description='MODE Disparity estimation training
 # model
 parser.add_argument('--model_disp', default='ModeDisparity', help='select model')
 # data
-parser.add_argument("--dataset", default="Deep360", type=str, help="dataset name")
+parser.add_argument("--dataset", default="Deep360", choices=["Deep360", "3D60"], type=str, help="dataset name")
 parser.add_argument("--dataset_root", default="../../datasets/Deep360/", type=str, help="dataset root directory.")
+
+parser.add_argument("--pair_3d60", default="lr", choices=["lr", "ud", "ur", "all"], type=str, help="dataset name")
+
 parser.add_argument('--width', default=512, type=int, help="width of omnidirectional images in Cassini domain")
 parser.add_argument('--height', default=1024, type=int, help="height of omnidirectional images in Cassini domain")
 # stereo
@@ -71,6 +78,9 @@ print("Args:\n{}".format(args))
 # cuda & device
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
+if args.dataset=='3D60':
+  os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
 # -------------------------------------------
 # Random Seed -----------------------------
 torch.manual_seed(args.seed)
@@ -189,10 +199,23 @@ def train(trainDispDataLoader, valDispDataLoader, model_disp, optimizer):
     # -------------------------------
     # Train ----------------------------------
     for batch_idx, batchData in enumerate(tqdm(trainDispDataLoader, desc='Train iter {}'.format(epoch))):
-      leftImg = batchData['leftImg'].cuda()
-      rightImg = batchData['rightImg'].cuda()
-      dispMap = batchData['dispMap'].cuda()
-      mask = (~torch.isnan(dispMap))
+      if args.dataset == 'Deep360':
+        leftImg = batchData['leftImg'].cuda()
+        rightImg = batchData['rightImg'].cuda()
+        dispMap = batchData['dispMap'].cuda()
+        mask = (~torch.isnan(dispMap))
+      elif args.dataset == '3D60':
+        if random.random() < 0.5:  #l-r
+          leftImg = batchData['leftImg'].cuda()
+          rightImg = batchData['rightImg'].cuda()
+          dispMap = batchData['dispMap'].cuda()
+        else:  # r-l
+          leftImg = batchData['leftImg_flip'].cuda()
+          rightImg = batchData['rightImg_flip'].cuda()
+          dispMap = batchData['dispMap_flip'].cuda()
+        mask = (~torch.isnan(dispMap))
+      else:
+        raise NotImplementedError("dataset must be Deep360 or 3D60!")
       # for fish eye datasets
       b, c, h, w = leftImg.shape
       loss = trainDisp(leftImg, rightImg, dispMap, mask, model_disp, optimizer)
@@ -254,8 +277,27 @@ if args.dataset == 'Deep360':
   trainDispData = Deep360DatasetDisparity(train_left_img, train_right_img, train_left_disp, shape=(args.height, args.width))
   valDispData = Deep360DatasetDisparity(val_left_img, val_right_img, val_left_disp)
   print("Num of training data:{}. Num of validation data:{}".format(len(trainDispData), len(valDispData)))
-  trainDispDataLoader = torch.utils.data.DataLoader(trainDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=True)
-  valDispDataLoader = torch.utils.data.DataLoader(valDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=False)
+elif args.dataset == '3D60':
+  trainDispData = Dataset3D60Disparity(filenamesFile='./dataloader/3d60_train.txt',
+                                       rootDir=args.dataset_root,
+                                       curStage='training',
+                                       shape=(512,
+                                              256),
+                                       crop=False,
+                                       pair=args.pair_3d60,
+                                       flip=False,
+                                       maxDepth=20.0)
+  valDispData = Dataset3D60Disparity(filenamesFile='./dataloader/3d60_val.txt',
+                                     rootDir=args.dataset_root,
+                                     curStage='validation',
+                                     shape=(512,
+                                            256),
+                                     crop=False,
+                                     pair=args.pair_3d60,
+                                     flip=False,
+                                     maxDepth=20.0)
+trainDispDataLoader = torch.utils.data.DataLoader(trainDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=True)
+valDispDataLoader = torch.utils.data.DataLoader(valDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=False)
 # -------------------------------------------------
 
 # Define models ----------------------------------------------
