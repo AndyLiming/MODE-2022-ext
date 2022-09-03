@@ -1,6 +1,7 @@
 # sample script
 # deep360: python trainSSMode.py --learning_rate 0.0001 --checkpoint_disp ./checkpoints/pretrained_sceneflow.tar --loadSHGonly
 # deep360 soield: python trainSSMode.py --learning_rate 0.00001 --checkpoint_disp ./checkpoints/disp/SSMODE_sphere/Deep360/ckpt_disp_SSMODE_sphere_Deep360_55.tar --num_index 192  --batch_size 2 --save_checkpoint_path ./checkpoints/soiled --soiled --epochs 40 > logTrainSsmodeSoiled.txt
+# 3d60: python train_disparity.py --learning_rate 0.001 --checkpoint_disp ./checkpoints/pretrained_sceneflow.tar --loadSHGonly --dataset 3D60 --dataset_root ../../datasets/3D60/ --pair_3d60 lr --width 256 --height 512 --max_depth 20 --epochs 65 --batch_size 6
 
 from __future__ import print_function
 import os
@@ -79,7 +80,7 @@ print("Args:\n{}".format(args))
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-if args.dataset=='3D60':
+if args.dataset == '3D60':
   os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
 # -------------------------------------------
 # Random Seed -----------------------------
@@ -296,6 +297,8 @@ elif args.dataset == '3D60':
                                      pair=args.pair_3d60,
                                      flip=False,
                                      maxDepth=20.0)
+else:
+  raise NotImplementedError("dataset must be Deep360 or 3D60!")
 trainDispDataLoader = torch.utils.data.DataLoader(trainDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=True)
 valDispDataLoader = torch.utils.data.DataLoader(valDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=False)
 # -------------------------------------------------

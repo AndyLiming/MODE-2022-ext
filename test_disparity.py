@@ -1,3 +1,5 @@
+# sample
+# 3d60: python test_disparity.py --dataset 3D60 --dataset_root ../../datasets/3D60/ --pair_3d60 lr --width 256 --height 512 --max_depth 20 --checkpoint_disp ./checkpoints/disp/ModeDisparity/3D60/ckpt_disp_ModeDisparity_3D60_65.tar --save_output_path ./outputs/testMode3D60_lr
 import os
 
 import argparse
@@ -22,14 +24,15 @@ import prettytable as pt
 
 from models import ModeDisparity
 from utils import evaluation, geometry
-from dataloader import list_deep360_disparity_test, Deep360DatasetDisparity
+from dataloader import list_deep360_disparity_test, Deep360DatasetDisparity, Dataset3D60Disparity
 
 parser = argparse.ArgumentParser(description='MODE Disparity estimation testing')
 
 parser.add_argument('--model_disp', default='ModeDisparity', help='select model')
-parser.add_argument("--dataset", default="Deep360", type=str, help="dataset name")
-
+parser.add_argument("--dataset", default="Deep360", choices=["Deep360", "3D60"], type=str, help="dataset name")
 parser.add_argument("--dataset_root", default="../../datasets/Deep360/", type=str, help="dataset root directory.")
+
+parser.add_argument("--pair_3d60", default="lr", choices=["lr", "ud", "ur", "all"], type=str, help="dataset name")
 parser.add_argument('--width', default=512, type=int, help="width of omnidirectional images in Cassini domain")
 parser.add_argument('--height', default=1024, type=int, help="height of omnidirectional images in Cassini domain")
 # stereo
@@ -50,6 +53,9 @@ parser.add_argument('--save_output_path', type=str, default=None, help='path to 
 parser.add_argument('--save_ori', action='store_true', default=False, help='save original disparity or depth value map')
 
 args = parser.parse_args()
+
+if args.dataset == '3D60':
+  os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
 
 heightC, widthC = args.height, args.width  #Cassini shape
 heightE, widthE = args.width, args.height  #ERP shape
@@ -141,9 +147,10 @@ def testDisp(modelDisp, testDispDataLoader, modelNameDisp, numTestData):
       eval_metrics.append(evaluation.pixel_error_pct(3, output[mask], dispMap[mask]))
       eval_metrics.append(evaluation.pixel_error_pct(5, output[mask], dispMap[mask]))
       eval_metrics.append(evaluation.D1(3, 0.05, output[mask], dispMap[mask]))
+      name_key = 'dispNames' if args.dataset == 'deep360' else 'leftNames'
       if save_out:
-        if args.save_ori: saveOutputOriValue(output.clone(), dispMap.clone(), mask, args.save_output_path, counter, names=batchData['dispNames'])  # save npz
-        saveOutput(output.clone(), dispMap.clone(), mask, args.save_output_path, counter, names=batchData['dispNames'], log=True)
+        if args.save_ori: saveOutputOriValue(output.clone(), dispMap.clone(), mask, args.save_output_path, counter, names=batchData[name_key])  # save npz
+        saveOutput(output.clone(), dispMap.clone(), mask, args.save_output_path, counter, names=batchData[name_key], log=True)
       total_eval_metrics += eval_metrics
     mean_errors = total_eval_metrics / len(testDispDataLoader)
     mean_errors = ['{:^.4f}'.format(x) for x in mean_errors]
@@ -171,7 +178,19 @@ def main():
   if args.dataset == 'Deep360':  # deep 360
     test_left_img, test_right_img, test_left_disp = list_deep360_disparity_test(args.dataset_root, soiled=args.soiled)
     testDispData = Deep360DatasetDisparity(leftImgs=test_left_img, rightImgs=test_right_img, disps=test_left_disp)
-    testDispDataLoader = torch.utils.data.DataLoader(testDispData, batch_size=args.batch_size, num_workers=args.batch_size, pin_memory=False, shuffle=False)
+  elif args.dataset == '3D60':
+    testDispData = Dataset3D60Disparity(filenamesFile='./dataloader/3d60_test.txt',
+                                        rootDir=args.dataset_root,
+                                        curStage='testing',
+                                        shape=(512,
+                                               256),
+                                        crop=False,
+                                        pair=args.pair_3d60,
+                                        flip=False,
+                                        maxDepth=20.0)
+  else:
+    raise NotImplementedError("dataset must be Deep360 or 3D60!")
+  testDispDataLoader = torch.utils.data.DataLoader(testDispData, batch_size=args.batch_size, num_workers=args.batch_size, pin_memory=False, shuffle=False)
 
   # testing
   testDisp(model_disp, testDispDataLoader, args.checkpoint_disp, len(testDispData))
