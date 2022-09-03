@@ -156,17 +156,14 @@ def __iterPixels_with_conf(output_h, output_w, conf_1, conf_2, r_1, r_2, view_2,
   return view_2, conf_2
 
 
-def erp2rect_cassini(erp, R, ca_h, ca_w):
+def erp2rect_cassini(erp, R, ca_h, ca_w, devcice='cuda'):
   # erp: erp image
   # R: rotate matrix
-  erp_h, erp_w = erp.shape[:-1]
-  print(erp_h, erp_w)
-
   if erp.ndim == 2:
     erp = np.expand_dims(erp, axis=-1)
-    source_image = torch.FloatTensor(erp).unsqueeze(0).transpose(1, 3).transpose(2, 3).cuda()
+    source_image = torch.FloatTensor(erp).unsqueeze(0).transpose(1, 3).transpose(2, 3).to(devcice)
   elif erp.ndim == 3:
-    source_image = torch.FloatTensor(erp).unsqueeze(0).transpose(1, 3).transpose(2, 3).cuda()
+    source_image = torch.FloatTensor(erp).unsqueeze(0).transpose(1, 3).transpose(2, 3).to(devcice)
   else:
     source_image = erp
 
@@ -188,12 +185,11 @@ def erp2rect_cassini(erp, R, ca_h, ca_w):
 
   X = np.expand_dims(np.dstack((x, y, z)), axis=-1)
   X2 = np.matmul(np.linalg.inv(R), X)
-  print(X2[:, :, 0, :].shape)
   phi_erp_map = np.arcsin(X2[:, :, 1, :])  #arcsin(y)
   theta_erp_map = np.arctan2(X2[:, :, 0, :], X2[:, :, 2, :])  #arctan(x/z)
 
-  grid_x = torch.FloatTensor(np.clip(-theta_erp_map / np.pi, -1, 1)).cuda()
-  grid_y = torch.FloatTensor(np.clip(-phi_erp_map / (0.5 * np.pi), -1, 1)).cuda()
+  grid_x = torch.FloatTensor(np.clip(-theta_erp_map / np.pi, -1, 1)).to(devcice)
+  grid_y = torch.FloatTensor(np.clip(-phi_erp_map / (0.5 * np.pi), -1, 1)).to(devcice)
   grid = torch.cat([grid_x, grid_y], dim=-1).unsqueeze(0).repeat_interleave(source_image.shape[0], dim=0)
   sampled_image = F.grid_sample(source_image, grid, mode='bilinear', align_corners=True, padding_mode='border')  # 1, ch, self.output_h, self.output_w
   if erp.ndim == 3:
