@@ -1,3 +1,5 @@
+# sample script: python testSSMode.py --checkpoint ./checkpoints/ckpt_disp_SSMODE_sphere_Deep360_40_soiled.tar --save_output_path ./outputs/test_ssmode_sphere_soiled_40_b2_192 --soiled
+
 import os
 
 import argparse
@@ -141,6 +143,7 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
   with torch.no_grad():
     for batch_idx, batchData in enumerate(tqdm(testDispDataLoader, desc='Test iter')):
       rgbImgs = [x.cuda() for x in batchData['rgbImgs']]
+      #print(torch.max(rgbImgs[0]), torch.min(rgbImgs[0]))
       depthGT = batchData['depthMap'].cuda()
       mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
       # for fish eye datasets
