@@ -7,7 +7,7 @@ import torch.nn.functional as F
 import numpy as np
 import math
 from dataloader import list_deep360_disparity_train, list_deep360_disparity_test
-from dataloader import Deep360DatasetDisparity
+from dataloader import Deep360DatasetDisparity, Dataset3D60Disparity
 from models import ModeDisparity
 from utils.geometry import rotateCassini, depthViewTransWithConf
 import cv2
@@ -49,12 +49,16 @@ if args.dbname == 'Deep360':
   assert (len(all_left) == len(all_right) == len(all_disp) == total_num)
   #------------------------------------------------
 
-AllImgLoader = torch.utils.data.DataLoader(Deep360DatasetDisparity(all_left, all_right, all_disp), batch_size=args.batch_size, shuffle=False, num_workers=args.batch_size, drop_last=False)
+  AllImgLoader = torch.utils.data.DataLoader(Deep360DatasetDisparity(all_left, all_right, all_disp), batch_size=args.batch_size, shuffle=False, num_workers=args.batch_size, drop_last=False)
 
 # Note
 # in_height,in_width: shape of input image. using (1024,512) for deep360
 if args.dbname == 'Deep360':
   model = ModeDisparity(args.max_disp, conv='Sphere', in_height=1024, in_width=512, out_conf=True)
+elif args.dbname == '3D60':
+  model = ModeDisparity(args.max_disp, conv='Sphere', in_height=512, in_width=256, out_conf=True)
+else:
+  raise NotImplementedError("only support Deep360 and 3D60 datasets!")
 
 if args.cuda:
   model = nn.DataParallel(model)
@@ -108,7 +112,7 @@ def disp2depth(disp, conf_map, cam_pair):
   if args.dbname == 'Deep360':
     baseline = np.array([1, 1, math.sqrt(2), math.sqrt(2), 1, 1]).astype(np.float32)
   elif args.dbname == '3D60':
-    pass
+    baseline = np.array([0.26, 0.26, 0.26 * math.sqrt(2)]).astype(np.float32)  # lr/ud:0.26 ur:0.26*sqrt(2)
   else:
     baseline = np.array([0.6 * math.sqrt(2), 0.6 * math.sqrt(2), 1.2, 1.2, 0.6 * math.sqrt(2), 0.6 * math.sqrt(2)]).astype(np.float32)
 
@@ -160,7 +164,70 @@ def disp2depth(disp, conf_map, cam_pair):
     return None
 
 
-def main():
+def disp2depth_3D60(disp_l, disp_r, conf_map_l, conf_map_r, cam_pair, max_depth=1000):
+  cam_pair_dict = {'lr': 0, 'ud': 1, 'ur': 2}
+
+  if args.dbname == 'Deep360':
+    baseline = np.array([1, 1, math.sqrt(2), math.sqrt(2), 1, 1]).astype(np.float32)
+  elif args.dbname == '3D60':
+    baseline = np.array([0.26, 0.26, 0.26 * math.sqrt(2)]).astype(np.float32)  # lr/ud:0.26 ur:0.26*sqrt(2)
+  else:
+    baseline = np.array([0.6 * math.sqrt(2), 0.6 * math.sqrt(2), 1.2, 1.2, 0.6 * math.sqrt(2), 0.6 * math.sqrt(2)]).astype(np.float32)
+
+  output_h = disp_l.shape[0]
+  output_w = disp_l.shape[1]
+
+  phi_l_start = 0.5 * math.pi - (0.5 * math.pi / output_w)
+  phi_l_end = -0.5 * math.pi
+  phi_l_step = math.pi / output_w
+  phi_l_range = np.arange(phi_l_start, phi_l_end, -phi_l_step)
+  phi_l_map = np.array([phi_l_range for j in range(output_h)]).astype(np.float32)
+
+  # disp left
+  mask_disp_is_0 = disp_l == 0
+  disp_not_0 = np.ma.array(disp_l, mask=mask_disp_is_0)
+  phi_r_map = disp_not_0 * math.pi / output_w + phi_l_map
+  # sin theory
+  depth_l = baseline[cam_pair_dict[cam_pair]] * np.sin(math.pi / 2 - phi_r_map) / np.sin(phi_r_map - phi_l_map)
+  depth_l = depth_l.filled(1000)
+  depth_l[depth_l > 1000] = 1000
+  depth_l[depth_l < 0] = 0
+
+  # disp right
+  mask_disp_is_0 = disp_r == 0
+  disp_not_0 = np.ma.array(disp_r, mask=mask_disp_is_0)
+  phi_r_map = disp_not_0 * math.pi / output_w + phi_l_map
+  # sin theory
+  depth_r = baseline[cam_pair_dict[cam_pair]] * np.sin(math.pi / 2 - phi_r_map) / np.sin(phi_r_map - phi_l_map)
+  depth_r = depth_r.filled(1000)
+  depth_r[depth_r > 1000] = 1000
+  depth_r[depth_r < 0] = 0
+
+  if cam_pair == 'lr':
+    depth_r = cv2.flip(depth_r, 1)  # right need flip
+    conf_map_r = cv2.flip(conf_map_r, 1)
+    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, -0.26, 0, 0, 0)  # x axis trans
+    depth_1 = depth_l
+    conf_2 = conf_map_l
+    return depth_1, conf_1, depth_2, conf_2
+  elif cam_pair == 'ud':
+    depth_r = cv2.flip(depth_r, 1)  # right need flip
+    conf_map_r = cv2.flip(conf_map_r, 1)  # NOTE: r in ud mode -> left/down
+    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, 0, 0, 0.5 * math.pi, 0)
+    depth_1, conf_1 = depthViewTransWithConf(depth_l, conf_map_l, 0.26, 0, 0, 0, 0.5 * math.pi, 0)
+    return depth_1, conf_1, depth_2, conf_2
+  elif cam_pair == 'ur':
+    depth_r = cv2.flip(depth_r, 1)  # right need flip
+    conf_map_r = cv2.flip(conf_map_r, 1)  # NOTE: r in ur mode -> right
+    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, 0.26, 0, 0.25 * math.pi, 0)
+    depth_1, conf_1 = depthViewTransWithConf(depth_l, conf_map_l, 0.26, 0, 0, 0, 0.25 * math.pi, 0)
+    return depth_1, conf_1, depth_2, conf_2
+  else:
+    print("Error! Wrong Cam_pair!")
+    return None
+
+
+def save_stage1_Deep360():
   args.cuda = not args.no_cuda and torch.cuda.is_available()
   device = torch.device("cuda" if args.cuda else "cpu")
   if args.dbname == 'Deep360':
@@ -199,5 +266,74 @@ def main():
       cv2.imwrite(outpath_conf + "conf_map.png", conf_at_1 * 255)
 
 
+def build_3D60_pred_dir():
+  # views = ['Center_Left_Down', 'Right', 'Up']
+  views = ['Center_Left_Down']
+  data = ['disp_pred2depth', 'conf_map']
+  sub = ['Matterport3D', 'Stanford2D3D/area1', 'Stanford2D3D/area2', 'Stanford2D3D/area3', 'Stanford2D3D/area4', 'Stanford2D3D/area5a', 'Stanford2D3D/area5b', 'Stanford2D3D/area6', 'SunCG']
+  for v in views:
+    for d in data:
+      for s in sub:
+        os.makedirs(os.path.join(args.outpath, v, d, s), exist_ok=True)
+
+
+def save_3D60_one_scene(dispDataLoader, device, cam_pair, maxDepth):
+  view = 'Center_Left_Down'
+  outdir_name = "disp_pred2depth"
+  outdir_conf_name = "conf_map"
+  for batchIdx, batchData in enumerate(dispDataLoader):
+    leftImg = batchData['leftImg'].to(device)
+    rightImg = batchData['rightImg'].to(device)
+    leftNames = batchData['leftNames']
+    pred_disp_batch, conf_map_batch = output_disp_and_conf(leftImg, rightImg)
+    for i in range(pred_disp_batch.shape[0]):
+      name_paths = leftNames[i].split('/')
+      file_name = name_paths[-1].split('color')[0]  # xxxid_
+      sub = os.path.join(name_paths[-3], name_paths[-2]) if name_paths[-2].startwith('area') else name_paths[-2]
+      file_name_1 = file_name + cam_pair + '_' + cam_pair[0]
+      file_name_2 = file_name + cam_pair + '_' + cam_pair[1]
+      depth_1, conf_1, depth_2, conf_2 = disp2depth_3D60(pred_disp_batch[i], conf_map_batch[i], cam_pair, max_depth=maxDepth)
+      np.savez(os.path.join(args.outpath, view, outdir_name, file_name_1 + '_' + outdir_name + '.npz'), depth_1)  #save npz files
+      np.savez(os.path.join(args.outpath, view, outdir_name, file_name_2 + '_' + outdir_name + '.npz'), depth_2)  #save npz files
+      #------------- save conf_map ------------------
+      cv2.imwrite(os.path.join(args.outpath, view, outdir_conf_name, file_name_1 + '_' + outdir_conf_name + '.png'), conf_1 * 255)
+      cv2.imwrite(os.path.join(args.outpath, view, outdir_conf_name, file_name_2 + '_' + outdir_conf_name + '.png'), conf_2 * 255)
+
+
+def save_stage1_3D60():
+  build_3D60_pred_dir()
+  args.cuda = not args.no_cuda and torch.cuda.is_available()
+  device = torch.device("cuda" if args.cuda else "cpu")
+  if args.soiled:
+    raise NotImplementedError("3D60 has no soiled data")
+  if args.dbname == '3D60':
+    #------------- Check the output directories -------
+    outdir_name = "disp_pred2depth"
+    outdir_conf_name = "conf_map"
+    train_filelist_name = './dataloader/3d60_train.txt'
+    test_filelist_name = './dataloader/3d60_test.txt'
+    val_filelist_name = './dataloader/3d60_val.txt'
+    for st in ['training', 'testing', 'validation']:
+      # training
+      if st == 'training':
+        dispData = Dataset3D60Disparity(filenamesFile=train_filelist_name, rootDir=args.dataset_root, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=20.0)
+      # validation
+      if st == 'validation':
+        dispData = Dataset3D60Disparity(filenamesFile=val_filelist_name, rootDir=args.dataset_root, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=20.0)
+      # testing
+      if st == 'testing':
+        dispData = Dataset3D60Disparity(filenamesFile=test_filelist_name, rootDir=args.dataset_root, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=20.0)
+
+      dispDataLoader = torch.utils.data.DataLoader(dispData, batch_size=args.batch_size, shuffle=False, num_workers=args.batch_size, drop_last=False)
+      save_3D60_one_scene(dispDataLoader, device, args.pair_3d60, 20.0)
+
+
 if __name__ == '__main__':
-  main()
+  if args.dbname == 'Deep360':
+    save_stage1_Deep360()  # save Deep360 disparity to depth
+  elif args.dbname == '3D60':
+    for p in ['lr', 'ud', 'ur']:
+      args.pair_3d60 = p
+      save_stage1_3D60()  # save 3D60 disparity to depth
+  else:
+    raise NotImplementedError("only support Deep360 and 3D60 datasets!")

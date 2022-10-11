@@ -59,7 +59,8 @@ class Dataset3D60Disparity(Dataset):
                filenamesFile,
                rootDir='../../datasets/3D60/',
                curStage='training',
-               shape=(512, 256),
+               shape=(512,
+                      256),
                crop=False,
                pair='lr',
                flip=False,
@@ -106,8 +107,7 @@ class Dataset3D60Disparity(Dataset):
     self.fileNameList = self.__getFileList()
     self.phiMap = self.__genCassiniPhiMap()
 
-    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(
-        self.filenamesFile, len(self.fileNameList), self.rootDir))
+    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(self.filenamesFile, len(self.fileNameList), self.rootDir))
 
   def __len__(self):
     return len(self.fileNameList)
@@ -261,9 +261,10 @@ class Dataset3D60Disparity(Dataset):
     depth_not_0 = np.ma.array(depthMap, mask=invMask)
     phi_l_map = self.phiMap
     disp = self.width * (np.arcsin(
-        np.clip((depth_not_0 * np.sin(phi_l_map) + self.baseline) /
-                np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline -
-                        2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)), -1, 1)) - phi_l_map) / np.pi
+        np.clip(
+            (depth_not_0 * np.sin(phi_l_map) + self.baseline) / np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline - 2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)),
+            -1,
+            1)) - phi_l_map) / np.pi
     disp = disp.filled(np.nan)
     disp[disp < 0] = 0
     return disp
@@ -319,11 +320,8 @@ class Dataset3D60Fusion_2view(Dataset):
     # self.prefixConfMap_r = os.path.join(self.inputDir, 'conf_map', 'Right/')
     # self.prefixConfMap_u = os.path.join(self.inputDir, 'conf_map', 'Up/')
     self.view = view
-    self.prefixPredDepth = os.path.join(
-        self.inputDir, self.view,
-        'disp_pred2depth')  # inpudir/Center_Left_Down/disp_pred2depth/Matterport3D/index_lr_l.disp_pred2depth.npz
-    self.prefixConfMap = os.path.join(
-        self.inputDir, self.view, 'conf_map')  # inpudir/Center_Left_Down/conf_map/Matterport3D/index_lr_l.conf_map.png
+    self.prefixPredDepth = os.path.join(self.inputDir, self.view, 'disp_pred2depth')  # inpudir/Center_Left_Down/disp_pred2depth/Matterport3D/index_lr_l.disp_pred2depth.npz
+    self.prefixConfMap = os.path.join(self.inputDir, self.view, 'conf_map')  # inpudir/Center_Left_Down/conf_map/Matterport3D/index_lr_l.conf_map.png
 
     self.processed = preprocess.get_transform_stage1(augment=False)  # transform of rgb images
     self.processed_depth = preprocess.get_transform_stage2()
@@ -334,8 +332,7 @@ class Dataset3D60Fusion_2view(Dataset):
     self.fileNameList = self.__getFileList()
     self.phiMap = self.__genCassiniPhiMap()
 
-    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(
-        self.filenamesFile, len(self.fileNameList), self.rootDir))
+    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(self.filenamesFile, len(self.fileNameList), self.rootDir))
 
   def __len__(self):
     return len(self.fileNameList)
@@ -382,7 +379,7 @@ class Dataset3D60Fusion_2view(Dataset):
       pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth) + 'ud_u' + '_disp_pred2depth.npz'
       pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth_r) + 'ud_d' + '_disp_pred2depth.npz'
       conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap_l) + 'ud_u' + '_conf_map.png'
-      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'ud_u' + '_conf_map.png'
+      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'ud_d' + '_conf_map.png'
       rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
     elif self.pair == 'ur':
       left = upName
@@ -460,9 +457,10 @@ class Dataset3D60Fusion_2view(Dataset):
     depth_not_0 = np.ma.array(depthMap, mask=invMask)
     phi_l_map = self.phiMap
     disp = self.width * (np.arcsin(
-        np.clip((depth_not_0 * np.sin(phi_l_map) + self.baseline) /
-                np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline -
-                        2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)), -1, 1)) - phi_l_map) / np.pi
+        np.clip(
+            (depth_not_0 * np.sin(phi_l_map) + self.baseline) / np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline - 2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)),
+            -1,
+            1)) - phi_l_map) / np.pi
     disp = disp.filled(np.nan)
     disp[disp < 0] = 0
     return disp
@@ -483,7 +481,7 @@ class Dataset3D60Fusion_2view(Dataset):
 
 class Dataset3D60Fusion_3view(Dataset):
   #360D Dataset#
-  # fusion of all 3 views (lr_r,lr_r,ud_u,ud_d,ur_u,ur_r)
+  # fusion of all 3 views (lr_l,lr_r,ud_u,ud_d,ur_u,ur_r)
   def __init__(
       self,
       filenamesFile,
@@ -529,11 +527,8 @@ class Dataset3D60Fusion_3view(Dataset):
     # self.prefixConfMap_r = os.path.join(self.inputDir, 'conf_map', 'Right/')
     # self.prefixConfMap_u = os.path.join(self.inputDir, 'conf_map', 'Up/')
     self.view = view
-    self.prefixPredDepth = os.path.join(
-        self.inputDir, self.view,
-        'disp_pred2depth')  # inpudir/Center_Left_Down/disp_pred2depth/Matterport3D/index_lr_l.disp_pred2depth.npz
-    self.prefixConfMap = os.path.join(
-        self.inputDir, self.view, 'conf_map')  # inpudir/Center_Left_Down/conf_map/Matterport3D/index_lr_l.conf_map.png
+    self.prefixPredDepth = os.path.join(self.inputDir, self.view, 'disp_pred2depth')  # inpudir/Center_Left_Down/disp_pred2depth/Matterport3D/index_lr_l.disp_pred2depth.npz
+    self.prefixConfMap = os.path.join(self.inputDir, self.view, 'conf_map')  # inpudir/Center_Left_Down/conf_map/Matterport3D/index_lr_l.conf_map.png
 
     self.processed = preprocess.get_transform_stage1(augment=False)  # transform of rgb images
     self.processed_depth = preprocess.get_transform_stage2()
@@ -544,8 +539,7 @@ class Dataset3D60Fusion_3view(Dataset):
     self.fileNameList = self.__getFileList()
     self.phiMap = self.__genCassiniPhiMap()
 
-    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(
-        self.filenamesFile, len(self.fileNameList), self.rootDir))
+    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(self.filenamesFile, len(self.fileNameList), self.rootDir))
 
   def __len__(self):
     return len(self.fileNameList)
@@ -586,7 +580,7 @@ class Dataset3D60Fusion_3view(Dataset):
       depth = leftDepthName
       depth_r = rightDepthName
       inputName = left.split('color')[0]
-      pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth) + 'lr_l' + '_disp_pred2depth.npz'
+      pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth_l) + 'lr_l' + '_disp_pred2depth.npz'
       pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth_r) + 'lr_r' + '_disp_pred2depth.npz'
       conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap_l) + 'lr_l' + '_conf_map.png'
       conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'lr_r' + '_conf_map.png'
@@ -598,9 +592,9 @@ class Dataset3D60Fusion_3view(Dataset):
       depth_r = leftDepthName
       inputName = left.split('color')[0]
       pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth) + 'ud_u' + '_disp_pred2depth.npz'
-      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth_r) + 'ud_d' + '_disp_pred2depth.npz'
-      conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap_l) + 'ud_u' + '_conf_map.png'
-      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'ud_u' + '_conf_map.png'
+      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth) + 'ud_d' + '_disp_pred2depth.npz'
+      conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap) + 'ud_u' + '_conf_map.png'
+      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap) + 'ud_u' + '_conf_map.png'
       rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
     elif self.pair == 'ur':
       left = upName
@@ -609,7 +603,7 @@ class Dataset3D60Fusion_3view(Dataset):
       depth_r = rightDepthName
       inputName = left.split('color')[0]
       pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth) + 'ur_u' + '_disp_pred2depth.npz'
-      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth_r) + 'ur_r' + '_disp_pred2depth.npz'
+      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth) + 'ur_r' + '_disp_pred2depth.npz'
       conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap_l) + 'ur_u' + '_conf_map.png'
       conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'ur_r' + '_conf_map.png'
       rotate_vector = np.array([0, 0, -np.pi / 4]).astype(np.float32)
@@ -678,9 +672,10 @@ class Dataset3D60Fusion_3view(Dataset):
     depth_not_0 = np.ma.array(depthMap, mask=invMask)
     phi_l_map = self.phiMap
     disp = self.width * (np.arcsin(
-        np.clip((depth_not_0 * np.sin(phi_l_map) + self.baseline) /
-                np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline -
-                        2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)), -1, 1)) - phi_l_map) / np.pi
+        np.clip(
+            (depth_not_0 * np.sin(phi_l_map) + self.baseline) / np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline - 2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)),
+            -1,
+            1)) - phi_l_map) / np.pi
     disp = disp.filled(np.nan)
     disp[disp < 0] = 0
     return disp
@@ -702,14 +697,7 @@ class Dataset3D60Fusion_3view(Dataset):
 if __name__ == '__main__':
   from tqdm import tqdm
   os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
-  da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt',
-                            rootDir='../../../datasets/3D60/',
-                            curStage='validation',
-                            shape=(512, 256),
-                            crop=False,
-                            pair='lr',
-                            flip=False,
-                            maxDepth=20.0)
+  da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', curStage='validation', shape=(512, 256), crop=False, pair='lr', flip=False, maxDepth=20.0)
   myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
   maxDisp = 0
   for id, batch in enumerate(tqdm(myDL, desc='Train iter')):
