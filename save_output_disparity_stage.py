@@ -61,7 +61,7 @@ else:
   raise NotImplementedError("only support Deep360 and 3D60 datasets!")
 
 if args.cuda:
-  model = nn.DataParallel(model)
+  #model = nn.DataParallel(model)
   model.cuda()
 
 if args.checkpoint_disp is not None:
@@ -206,21 +206,21 @@ def disp2depth_3D60(disp_l, disp_r, conf_map_l, conf_map_r, cam_pair, max_depth=
   if cam_pair == 'lr':
     depth_r = cv2.flip(depth_r, 1)  # right need flip
     conf_map_r = cv2.flip(conf_map_r, 1)
-    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, -0.26, 0, 0, 0)  # x axis trans
+    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, 0.26, 0, 0, 0)  # x axis trans
     depth_1 = depth_l
-    conf_2 = conf_map_l
+    conf_1 = conf_map_l
     return depth_1, conf_1, depth_2, conf_2
   elif cam_pair == 'ud':
     depth_r = cv2.flip(depth_r, 1)  # right need flip
     conf_map_r = cv2.flip(conf_map_r, 1)  # NOTE: r in ud mode -> left/down
     depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, 0, 0, 0.5 * math.pi, 0)
-    depth_1, conf_1 = depthViewTransWithConf(depth_l, conf_map_l, 0.26, 0, 0, 0, 0.5 * math.pi, 0)
+    depth_1, conf_1 = depthViewTransWithConf(depth_l, conf_map_l, 0, 0, -0.26, 0, 0.5 * math.pi, 0)
     return depth_1, conf_1, depth_2, conf_2
   elif cam_pair == 'ur':
     depth_r = cv2.flip(depth_r, 1)  # right need flip
     conf_map_r = cv2.flip(conf_map_r, 1)  # NOTE: r in ur mode -> right
-    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, 0, 0, 0.26, 0, 0.25 * math.pi, 0)
-    depth_1, conf_1 = depthViewTransWithConf(depth_l, conf_map_l, 0.26, 0, 0, 0, 0.25 * math.pi, 0)
+    depth_2, conf_2 = depthViewTransWithConf(depth_r, conf_map_r, -0.26 * 0.5 * math.sqrt(2), 0, 0.26 * 0.5 * math.sqrt(2), 0, 0.25 * math.pi, 0)
+    depth_1, conf_1 = depthViewTransWithConf(depth_l, conf_map_l, -0.26 * 0.5 * math.sqrt(2), 0, -0.26 * 0.5 * math.sqrt(2), 0, 0.25 * math.pi, 0)
     return depth_1, conf_1, depth_2, conf_2
   else:
     print("Error! Wrong Cam_pair!")
@@ -282,22 +282,33 @@ def save_3D60_one_scene(dispDataLoader, device, cam_pair, maxDepth):
   outdir_name = "disp_pred2depth"
   outdir_conf_name = "conf_map"
   for batchIdx, batchData in enumerate(dispDataLoader):
+    print("\rDisparity output progress: {:.2f}%".format(100 * (batchIdx + 1) / len(dispDataLoader)), end='')
     leftImg = batchData['leftImg'].to(device)
     rightImg = batchData['rightImg'].to(device)
+    leftImgFlip = batchData['leftImg_flip'].to(device)
+    rightImgFlip = batchData['rightImg_flip'].to(device)
     leftNames = batchData['leftNames']
-    pred_disp_batch, conf_map_batch = output_disp_and_conf(leftImg, rightImg)
-    for i in range(pred_disp_batch.shape[0]):
+    pred_disp_batch_l, conf_map_batch_l = output_disp_and_conf(leftImg, rightImg)
+    pred_disp_batch_r, conf_map_batch_r = output_disp_and_conf(leftImgFlip, rightImgFlip)
+    for i in range(pred_disp_batch_l.shape[0]):
       name_paths = leftNames[i].split('/')
       file_name = name_paths[-1].split('color')[0]  # xxxid_
-      sub = os.path.join(name_paths[-3], name_paths[-2]) if name_paths[-2].startwith('area') else name_paths[-2]
+      sub = os.path.join(name_paths[-3], name_paths[-2]) if name_paths[-2].startswith('area') else name_paths[-2]
       file_name_1 = file_name + cam_pair + '_' + cam_pair[0]
       file_name_2 = file_name + cam_pair + '_' + cam_pair[1]
-      depth_1, conf_1, depth_2, conf_2 = disp2depth_3D60(pred_disp_batch[i], conf_map_batch[i], cam_pair, max_depth=maxDepth)
-      np.savez(os.path.join(args.outpath, view, outdir_name, file_name_1 + '_' + outdir_name + '.npz'), depth_1)  #save npz files
-      np.savez(os.path.join(args.outpath, view, outdir_name, file_name_2 + '_' + outdir_name + '.npz'), depth_2)  #save npz files
+      depth_1, conf_1, depth_2, conf_2 = disp2depth_3D60(pred_disp_batch_l[i], pred_disp_batch_r[i], conf_map_batch_l[i], conf_map_batch_r[i], cam_pair, max_depth=maxDepth)
+      # depth_1_s = ((depth_1 - depth_1.min()) / (depth_1.max() - depth_1.min()) * 255).astype(np.uint8)
+      # depth_2_s = ((depth_2 - depth_2.min()) / (depth_2.max() - depth_2.min()) * 255).astype(np.uint8)
+      # cv2.imwrite(os.path.join(args.outpath, view, outdir_name, sub, file_name_1 + '_' + outdir_name + '.png'), depth_1_s)
+      # cv2.imwrite(os.path.join(args.outpath, view, outdir_name, sub, file_name_2 + '_' + outdir_name + '.png'), depth_2_s)
+
+      np.savez(os.path.join(args.outpath, view, outdir_name, sub, file_name_1 + '_' + outdir_name + '.npz'), depth_1)  #save npz files
+      np.savez(os.path.join(args.outpath, view, outdir_name, sub, file_name_2 + '_' + outdir_name + '.npz'), depth_2)  #save npz files
       #------------- save conf_map ------------------
-      cv2.imwrite(os.path.join(args.outpath, view, outdir_conf_name, file_name_1 + '_' + outdir_conf_name + '.png'), conf_1 * 255)
-      cv2.imwrite(os.path.join(args.outpath, view, outdir_conf_name, file_name_2 + '_' + outdir_conf_name + '.png'), conf_2 * 255)
+      cv2.imwrite(os.path.join(args.outpath, view, outdir_conf_name, sub, file_name_1 + '_' + outdir_conf_name + '.png'), conf_1 * 255)
+      cv2.imwrite(os.path.join(args.outpath, view, outdir_conf_name, sub, file_name_2 + '_' + outdir_conf_name + '.png'), conf_2 * 255)
+    # DEBUG
+    #break
 
 
 def save_stage1_3D60():
@@ -316,22 +327,23 @@ def save_stage1_3D60():
     for st in ['training', 'testing', 'validation']:
       # training
       if st == 'training':
-        dispData = Dataset3D60Disparity(filenamesFile=train_filelist_name, rootDir=args.dataset_root, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=20.0)
+        dispData = Dataset3D60Disparity(filenamesFile=train_filelist_name, rootDir=args.datapath, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=1000.0)
       # validation
       if st == 'validation':
-        dispData = Dataset3D60Disparity(filenamesFile=val_filelist_name, rootDir=args.dataset_root, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=20.0)
+        dispData = Dataset3D60Disparity(filenamesFile=val_filelist_name, rootDir=args.datapath, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=1000.0)
       # testing
       if st == 'testing':
-        dispData = Dataset3D60Disparity(filenamesFile=test_filelist_name, rootDir=args.dataset_root, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=20.0)
+        dispData = Dataset3D60Disparity(filenamesFile=test_filelist_name, rootDir=args.datapath, curStage=st, shape=(512, 256), crop=False, pair=args.pair_3d60, flip=False, maxDepth=1000.0)
 
       dispDataLoader = torch.utils.data.DataLoader(dispData, batch_size=args.batch_size, shuffle=False, num_workers=args.batch_size, drop_last=False)
-      save_3D60_one_scene(dispDataLoader, device, args.pair_3d60, 20.0)
+      save_3D60_one_scene(dispDataLoader, device, args.pair_3d60, 1000.0)
 
 
 if __name__ == '__main__':
   if args.dbname == 'Deep360':
     save_stage1_Deep360()  # save Deep360 disparity to depth
   elif args.dbname == '3D60':
+    os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
     for p in ['lr', 'ud', 'ur']:
       args.pair_3d60 = p
       save_stage1_3D60()  # save 3D60 disparity to depth
