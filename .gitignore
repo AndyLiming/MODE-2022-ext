@@ -3,6 +3,7 @@ logs/
 outputs/
 checkpoints/
 dataloader/*.png
+pred_3D60/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
