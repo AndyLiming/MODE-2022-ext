@@ -79,6 +79,23 @@ print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in mo
 optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
 
 
+def select_deep360_views(depthes, confs, rgbs, num_view):
+  if num_view == 4:  # all views
+    return depthes, confs, rgbs
+  elif num_view == 3:  # 1,2,3
+    depthes = [depthes[0], depthes[1], depthes[3]]  #12,13,23
+    confs = [confs[0], confs[1], confs[3]]  #12,13,23
+    rgbs = [rgbs[0], rgbs[1], rgbs[3]]  #1,2,3
+    return depthes, confs, rgbs
+  elif num_view == 2:  # 1,2
+    depthes = [depthes[0]]  #12
+    confs = [confs[0]]  #12
+    rgbs = [rgbs[0], rgbs[1]]  #1,2
+    return depthes, confs, rgbs
+  else:
+    raise NotImplementedError("num of views must in [2,4] !")
+
+
 def silog_loss(lamda, pred, gt):
   mask1 = gt > 0
   mask2 = pred > 0
