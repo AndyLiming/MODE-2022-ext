@@ -25,11 +25,12 @@ parser.add_argument('--dbname', default="Deep360", help='dataset name')
 parser.add_argument('--soiled', action='store_true', default=False, help='train fusion network from soiled data (only for Deep360)')
 parser.add_argument('--resize', action='store_true', default=False, help='resize the input by downsampling to 1/2 of its original size')
 parser.add_argument('--datapath-input', default='./outputs/Deep360PredDepth/', help='the path of the input of stage2, which is just the output of stage1')
-parser.add_argument('--datapath-dataset', default='./datasets/Deep360/', help='the path of the dataset')
+parser.add_argument('--datapath-dataset', default='../../datasets/Deep360/', help='the path of the dataset')
 parser.add_argument('--epochs', type=int, default=150, help='the number of epochs for training')
 parser.add_argument('--epoch-start', type=int, default=0, help='change this if the training was broken and you want to continue from the breakpoint')
 parser.add_argument('--batch-size', type=int, default=4, help='batch size')
 parser.add_argument('--lr', type=float, default=0.0001, help='initial learning rate')
+parser.add_argument('--num_view', type=int, default=4, help='num of views in fusion')
 parser.add_argument('--loadmodel', default=None, help='load model path')
 parser.add_argument('--savemodel', default='./checkpoints/fusion/', help='save model path')
 parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
@@ -37,12 +38,40 @@ parser.add_argument('--seed', type=int, default=1, metavar='S', help='random see
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
+
+def select_deep360_views(depthes, confs, rgbs, num_view):
+  if num_view == 4:  # all views
+    return depthes, confs, rgbs
+  elif num_view == 3:  # 1,2,3
+    depthes = [depthes[0], depthes[1], depthes[3]]  #12,13,23
+    confs = [confs[0], confs[1], confs[3]]  #12,13,23
+    rgbs = [rgbs[0], rgbs[1], rgbs[3]]  #1,2,3
+    return depthes, confs, rgbs
+  elif num_view == 2:  # 1,2
+    depthes = [depthes[0]]  #12
+    confs = [confs[0]]  #12
+    rgbs = [rgbs[0], rgbs[1]]  #1,2
+    return depthes, confs, rgbs
+  else:
+    raise NotImplementedError("num of views must in [2,4] !")
+
+
 torch.manual_seed(args.seed)
 if args.cuda:
   torch.cuda.manual_seed(args.seed)
 
 if args.dbname == 'Deep360':
   train_depthes, train_confs, train_rgbs, train_gt, val_depthes, val_confs, val_rgbs, val_gt = lt.list_deep360_fusion_train(args.datapath_input, args.datapath_dataset, args.soiled)
+
+# select inputs based on num of views
+train_depthes, train_confs, train_rgbs = select_deep360_views(train_depthes, train_confs, train_rgbs, args.num_view)
+val_depthes, val_confs, val_rgbs = select_deep360_views(val_depthes, val_confs, val_rgbs, args.num_view)
+
+d_channel = args.num_view * (args.num_view - 1)  # depth channel = 2 * C(n,2)=2*n*(n-1)/2=n*(n-1)
+c_channel = 3 * args.num_view  # color channel = 3 * n
+print("num of views: {}. Depth channel: {}. Color channel: {}".format(args.num_view, d_channel, c_channel))
+print("train. len depth: {}, len confs: {}, len colors: {}".format(len(train_depthes), len(train_confs), len(train_rgbs)))
+print("val. len depth: {}, len confs: {}, len colors: {}".format(len(val_depthes), len(val_confs), len(val_rgbs)))
 
 TrainImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(train_depthes,
                                                                      train_confs,
@@ -61,7 +90,7 @@ if args.model == 'Baseline':
   model = Baseline(args.maxdepth)
 elif args.model == 'ModeFusion':
   if args.dbname == 'Deep360':
-    model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': 12, 'rgb': 12})
+    model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': d_channel, 'rgb': c_channel})
 else:
   print('no model')
 
@@ -77,23 +106,6 @@ if args.loadmodel is not None:
 print('Number of model parameters: {}'.format(sum([p.data.nelement() for p in model.parameters()])))
 
 optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
-
-
-def select_deep360_views(depthes, confs, rgbs, num_view):
-  if num_view == 4:  # all views
-    return depthes, confs, rgbs
-  elif num_view == 3:  # 1,2,3
-    depthes = [depthes[0], depthes[1], depthes[3]]  #12,13,23
-    confs = [confs[0], confs[1], confs[3]]  #12,13,23
-    rgbs = [rgbs[0], rgbs[1], rgbs[3]]  #1,2,3
-    return depthes, confs, rgbs
-  elif num_view == 2:  # 1,2
-    depthes = [depthes[0]]  #12
-    confs = [confs[0]]  #12
-    rgbs = [rgbs[0], rgbs[1]]  #1,2
-    return depthes, confs, rgbs
-  else:
-    raise NotImplementedError("num of views must in [2,4] !")
 
 
 def silog_loss(lamda, pred, gt):
@@ -192,7 +204,7 @@ def main():
     writer.add_scalar('Training Loss', total_train_loss / len(TrainImgLoader), epoch + args.epoch_start)
 
     #--- SAVING ---#
-    savefilename = os.path.join(args.savemodel, args.model, args.dbname, 'ckpt_fusion_epoch%d.tar' % (epoch + args.epoch_start))
+    savefilename = os.path.join(args.savemodel, args.model, args.dbname, 'ckpt_fusion_%dviews_epoch%d.tar' % (args.num_view, epoch + args.epoch_start))
     torch.save({'state_dict': model.state_dict()}, savefilename)
 
     #--- VALIDATION ---#

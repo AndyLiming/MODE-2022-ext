@@ -21,6 +21,8 @@ from models import Baseline, ModeFusion
 from utils import evaluation
 import prettytable as pt
 
+from train_fusion import select_deep360_views  # import select views of deep360 datasets
+
 parser = argparse.ArgumentParser(description='MODE Fusion testing')
 parser.add_argument('--maxdepth', type=float, default=1000.0, help='maximum depth in meters')
 parser.add_argument('--model', default='ModeFusion', help='select model')
@@ -31,6 +33,7 @@ parser.add_argument('--datapath-input', default='./outputs/Deep360PredDepth/', h
 parser.add_argument('--datapath-dataset', default='./datasets/Deep360/', help='the path of the dataset')
 parser.add_argument('--outpath', default='./MODE_Fusion_output/', help='the output path for fusion results')
 parser.add_argument('--batch-size', type=int, default=1, help='batch size')
+parser.add_argument('--num_view', type=int, default=4, help='num of views in fusion')
 parser.add_argument('--loadmodel', default=None, help='load model path')
 parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
