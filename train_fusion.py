@@ -45,7 +45,7 @@ def select_deep360_views(depthes, confs, rgbs, num_view):
   elif num_view == 3:  # 1,2,3
     depthes = [depthes[0], depthes[1], depthes[3]]  #12,13,23
     confs = [confs[0], confs[1], confs[3]]  #12,13,23
-    rgbs = [rgbs[0], rgbs[1], rgbs[3]]  #1,2,3
+    rgbs = [rgbs[0], rgbs[1], rgbs[2]]  #1,2,3
     return depthes, confs, rgbs
   elif num_view == 2:  # 1,2
     depthes = [depthes[0]]  #12
