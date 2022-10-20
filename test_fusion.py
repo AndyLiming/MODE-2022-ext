@@ -30,8 +30,8 @@ parser.add_argument('--dbname', default="Deep360", help='dataset name')
 parser.add_argument('--soiled', action='store_true', default=False, help='test fusion network on soiled data (only for Deep360)')
 parser.add_argument('--resize', action='store_true', default=False, help='resize the input by downsampling to 1/2 of its original size')
 parser.add_argument('--datapath-input', default='./outputs/Deep360PredDepth/', help='the path of the input of stage2, which is just the output of stage1')
-parser.add_argument('--datapath-dataset', default='./datasets/Deep360/', help='the path of the dataset')
-parser.add_argument('--outpath', default='./MODE_Fusion_output/', help='the output path for fusion results')
+parser.add_argument('--datapath-dataset', default='../../datasets/Deep360/', help='the path of the dataset')
+parser.add_argument('--outpath', default='./outputs/MODE_Fusion_output_soiled/', help='the output path for fusion results')
 parser.add_argument('--batch-size', type=int, default=1, help='batch size')
 parser.add_argument('--num_view', type=int, default=4, help='num of views in fusion')
 parser.add_argument('--loadmodel', default=None, help='load model path')
@@ -138,6 +138,8 @@ def main():
       if args.dbname == 'Deep360':
         ep_name = re.findall(r'ep[0-9]_', gt_name[i])[0]
         name = ep_name + name
+      elif args.dbname == '3D60':
+        pass
 
       # save gt png
       depth_gt = gt_batch[i]

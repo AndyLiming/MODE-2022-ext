@@ -147,7 +147,7 @@ def testDisp(modelDisp, testDispDataLoader, modelNameDisp, numTestData):
       eval_metrics.append(evaluation.pixel_error_pct(3, output[mask], dispMap[mask]))
       eval_metrics.append(evaluation.pixel_error_pct(5, output[mask], dispMap[mask]))
       eval_metrics.append(evaluation.D1(3, 0.05, output[mask], dispMap[mask]))
-      name_key = 'dispNames' if args.dataset == 'deep360' else 'leftNames'
+      name_key = 'dispNames' if args.dataset == 'Deep360' else 'leftNames'
       if save_out:
         if args.save_ori: saveOutputOriValue(output.clone(), dispMap.clone(), mask, args.save_output_path, counter, names=batchData[name_key])  # save npz
         saveOutput(output.clone(), dispMap.clone(), mask, args.save_output_path, counter, names=batchData[name_key], log=True)

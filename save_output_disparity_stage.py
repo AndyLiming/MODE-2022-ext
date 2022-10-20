@@ -61,7 +61,7 @@ else:
   raise NotImplementedError("only support Deep360 and 3D60 datasets!")
 
 if args.cuda:
-  #model = nn.DataParallel(model)
+  model = nn.DataParallel(model)
   model.cuda()
 
 if args.checkpoint_disp is not None:
