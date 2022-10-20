@@ -507,6 +507,7 @@ class Dataset3D60Fusion_3view(Dataset):
     assert view in ['Center_Left_Down/', 'Right/', 'Up/']
     # Member variable assignment
     self.rootDir = rootDir
+    self.inputDir = inputDir
     self.curStage = curStage
     self.height, self.width = shape
 
@@ -527,8 +528,8 @@ class Dataset3D60Fusion_3view(Dataset):
     # self.prefixConfMap_r = os.path.join(self.inputDir, 'conf_map', 'Right/')
     # self.prefixConfMap_u = os.path.join(self.inputDir, 'conf_map', 'Up/')
     self.view = view
-    self.prefixPredDepth = os.path.join(self.inputDir, self.view, 'disp_pred2depth')  # inpudir/Center_Left_Down/disp_pred2depth/Matterport3D/index_lr_l.disp_pred2depth.npz
-    self.prefixConfMap = os.path.join(self.inputDir, self.view, 'conf_map')  # inpudir/Center_Left_Down/conf_map/Matterport3D/index_lr_l.conf_map.png
+    self.prefixPredDepth = os.path.join(self.inputDir, self.view, 'disp_pred2depth/')  # inpudir/Center_Left_Down/disp_pred2depth/Matterport3D/index_lr_l.disp_pred2depth.npz
+    self.prefixConfMap = os.path.join(self.inputDir, self.view, 'conf_map/')  # inpudir/Center_Left_Down/conf_map/Matterport3D/index_lr_l.conf_map.png
 
     self.processed = preprocess.get_transform_stage1(augment=False)  # transform of rgb images
     self.processed_depth = preprocess.get_transform_stage2()
@@ -571,91 +572,46 @@ class Dataset3D60Fusion_3view(Dataset):
     up = upName
     depth = leftDepthName
 
+    # RGB:
+    rgbs = []
     rotate_vector = np.array([0, 0, 0]).astype(np.float32)
     R = cv2.Rodrigues(rotate_vector)[0]
-
-    if self.pair == 'lr':
-      left = leftName
-      right = rightName
-      depth = leftDepthName
-      depth_r = rightDepthName
-      inputName = left.split('color')[0]
-      pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth_l) + 'lr_l' + '_disp_pred2depth.npz'
-      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth_r) + 'lr_r' + '_disp_pred2depth.npz'
-      conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap_l) + 'lr_l' + '_conf_map.png'
-      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'lr_r' + '_conf_map.png'
-      rotate_vector = np.array([0, 0, 0]).astype(np.float32)
-    elif self.pair == 'ud':
-      left = upName
-      right = leftName
-      depth = upDepthName
-      depth_r = leftDepthName
-      inputName = left.split('color')[0]
-      pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth) + 'ud_u' + '_disp_pred2depth.npz'
-      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth) + 'ud_d' + '_disp_pred2depth.npz'
-      conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap) + 'ud_u' + '_conf_map.png'
-      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap) + 'ud_u' + '_conf_map.png'
-      rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
-    elif self.pair == 'ur':
-      left = upName
-      right = rightName
-      depth = upDepthName
-      depth_r = rightDepthName
-      inputName = left.split('color')[0]
-      pred_depth_1 = inputName.replace(self.prefix_l, self.prefixPredDepth) + 'ur_u' + '_disp_pred2depth.npz'
-      pred_depth_2 = inputName.replace(self.prefix_r, self.prefixPredDepth) + 'ur_r' + '_disp_pred2depth.npz'
-      conf_map_1 = inputName.replace(self.prefix_l, self.prefixConfMap_l) + 'ur_u' + '_conf_map.png'
-      conf_map_2 = inputName.replace(self.prefix_r, self.prefixConfMap_r) + 'ur_r' + '_conf_map.png'
-      rotate_vector = np.array([0, 0, -np.pi / 4]).astype(np.float32)
-
-    R = cv2.Rodrigues(rotate_vector)[0]
-
     leftRGB = np.array(Image.open(left).convert('RGB'))
     rightRGB = np.array(Image.open(right).convert('RGB'))
     leftRGB = erp2rect_cassini(leftRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
     rightRGB = erp2rect_cassini(rightRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
 
     leftDepth = np.array(cv2.imread(depth, cv2.IMREAD_ANYDEPTH)).astype(np.float32)
-    rightDepth = np.array(cv2.imread(depth_r, cv2.IMREAD_ANYDEPTH)).astype(np.float32)
     leftDepth = erp2rect_cassini(leftDepth, R, self.height, self.width, devcice='cpu')
-    rightDepth = erp2rect_cassini(rightDepth, R, self.height, self.width, devcice='cpu')
 
-    leftRGB = cv2.resize(leftRGB, (self.width, self.height))
-    rightRGB = cv2.resize(rightRGB, (self.width, self.height))
-    leftDepth = cv2.resize(leftDepth, (self.width, self.height))
-    rightDepth = cv2.resize(rightDepth, (self.width, self.height))
+    rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
+    R = cv2.Rodrigues(rotate_vector)[0]
+    upRGB = np.array(Image.open(up).convert('RGB'))
+    upRGB = erp2rect_cassini(upRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
+    rgbs.append(self.processed(leftRGB))
+    rgbs.append(self.processed(rightRGB))
+    rgbs.append(self.processed(upRGB))
 
-    #conf maps
-    confs = []
-    conf = cv2.imread(conf_map_1)
-    confs.append(np.expand_dims((conf[:, :, 0] / 255.0).astype(np.float32), axis=0))
-    conf = cv2.imread(conf_map_2)
-    confs.append(np.expand_dims((conf[:, :, 0] / 255.0).astype(np.float32), axis=0))
-
-    # depths input
+    # depth and confs
     depths = []
-    inp = np.expand_dims(np.load(pred_depth_1)['arr_0'].astype(np.float32), axis=-1)
-    depths.append(self.processed_depth(inp))
-    inp = np.expand_dims(np.load(pred_depth_2)['arr_0'].astype(np.float32), axis=-1)
-    depths.append(self.processed_depth(inp))
+    confs = []
+    inputName = left.split('color')[0]
+    for id in ['lr_l', 'lr_r', 'ud_u', 'ud_d', 'ur_u', 'ur_r']:
+      pred_depth_name = inputName.replace(self.prefix_l, self.prefixPredDepth) + id + '_disp_pred2depth.npz'
+      conf_map_name = inputName.replace(self.prefix_l, self.prefixConfMap) + id + '_conf_map.png'
+      inp = np.expand_dims(np.load(pred_depth_name)['arr_0'].astype(np.float32), axis=-1)
+      depths.append(self.processed_depth(inp))
+      conf = cv2.imread(conf_map_name)
+      confs.append(np.expand_dims((conf[:, :, 0] / 255.0).astype(np.float32), axis=0))
 
-    leftImg, rightImg, depthMap = leftRGB, rightRGB, leftDepth
-
-    depthMap[depthMap > self.maxDepth] = 0.0
-    gt = np.squeeze(depthMap, axis=-1)
-    gt = np.ascontiguousarray(gt, dtype=np.float32)
+    leftDepth[leftDepth > self.maxDepth] = 0.0
+    # gt = np.squeeze(leftDepth, axis=-1)
+    gt = np.ascontiguousarray(leftDepth, dtype=np.float32)
 
     leftRGB = leftRGB.astype(np.uint8)
     rightRGB = rightRGB.astype(np.uint8)
 
-    # print(np.max(leftImg), np.min(leftImg))
-    rgbs = []
-    rgbs.append(self.processed(leftImg))
-    rgbs.append(self.processed(rightImg))
-
     #leftDepth = torch.from_numpy(leftDepth).unsqueeze_(0)
-
-    # self.gt[index], depthes, confs, rgbs, gt
     return depth, depths, confs, rgbs, gt  # gt name, input depth, confs, rgbs, gt
 
   def __genCassiniPhiMap(self):
@@ -697,30 +653,42 @@ class Dataset3D60Fusion_3view(Dataset):
 if __name__ == '__main__':
   from tqdm import tqdm
   os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
-  da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', curStage='validation', shape=(512, 256), crop=False, pair='lr', flip=False, maxDepth=20.0)
+  # NOTE: test 3D60 disparity
+  # da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', curStage='validation', shape=(512, 256), crop=False, pair='lr', flip=False, maxDepth=20.0)
+  # myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
+  # maxDisp = 0
+  # for id, batch in enumerate(tqdm(myDL, desc='Train iter')):
+  #   if id < 5:
+  #     if random.random() < 0.5:
+  #       left = batch['leftImg']
+  #       right = batch['rightImg']
+  #       disp = batch['dispMap']
+  #     else:
+  #       left = batch['leftImg_flip']
+  #       right = batch['rightImg_flip']
+  #       disp = batch['dispMap_flip']
+  #     print(disp.shape)
+  #     print(torch.max(left), torch.min(left), torch.max(right), torch.min(right))
+  #     disp[torch.isnan(disp)] = 0.0
+  #     disp[(disp > 192)] = 0.0
+  #     print(torch.max(disp), torch.min(disp))
+  #     disp = (disp - torch.min(disp)) / (torch.max(disp) - torch.min(disp))
+  #     left = (left - torch.min(left)) / (torch.max(left) - torch.min(left))
+  #     right = (right - torch.min(right)) / (torch.max(right) - torch.min(right))
+  #     torchvision.utils.save_image(left, 'ca_{}_l.png'.format(str(id)))
+  #     torchvision.utils.save_image(right, 'ca_{}_r.png'.format(str(id)))
+  #     torchvision.utils.save_image(disp, 'ca_{}_disp.png'.format(str(id)))
+  #   # test output disparity
+  #   maxDisp = max(maxDisp, torch.max(batch['dispMap']))
+  # print(maxDisp)
+  # NOTE: test 3D60 fusion
+  da = Dataset3D60Fusion_3view(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', inputDir='../outputs/pred_3D60/', curStage='validation')
   myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
-  maxDisp = 0
-  for id, batch in enumerate(tqdm(myDL, desc='Train iter')):
-    if id < 5:
-      if random.random() < 0.5:
-        left = batch['leftImg']
-        right = batch['rightImg']
-        disp = batch['dispMap']
-      else:
-        left = batch['leftImg_flip']
-        right = batch['rightImg_flip']
-        disp = batch['dispMap_flip']
-      print(disp.shape)
-      print(torch.max(left), torch.min(left), torch.max(right), torch.min(right))
-      disp[torch.isnan(disp)] = 0.0
-      disp[(disp > 192)] = 0.0
-      print(torch.max(disp), torch.min(disp))
-      disp = (disp - torch.min(disp)) / (torch.max(disp) - torch.min(disp))
-      left = (left - torch.min(left)) / (torch.max(left) - torch.min(left))
-      right = (right - torch.min(right)) / (torch.max(right) - torch.min(right))
-      torchvision.utils.save_image(left, 'ca_{}_l.png'.format(str(id)))
-      torchvision.utils.save_image(right, 'ca_{}_r.png'.format(str(id)))
-      torchvision.utils.save_image(disp, 'ca_{}_disp.png'.format(str(id)))
-    # test output disparity
-    maxDisp = max(maxDisp, torch.max(batch['dispMap']))
-  print(maxDisp)
+  for id, [depth_name, depths, confs, rgbs, gt] in enumerate(tqdm(myDL, desc='Train iter')):
+    print(depth_name)
+    print("depths: ", len(depths), depths[0].shape)
+    print("confs: ", len(confs), confs[0].shape)
+    print("rgbs: ", len(rgbs), rgbs[0].shape)
+    print("gt: ", gt.shape)
+    if id > 5:
+      break
