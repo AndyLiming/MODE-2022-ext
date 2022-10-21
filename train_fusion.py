@@ -16,6 +16,9 @@ from dataloader import deep360_loader as DA
 from models import Baseline, ModeFusion
 from utils import evaluation
 import prettytable as pt
+
+from utils.geometry import cassini2Equirec  # val erp projection
+
 from torch.utils.tensorboard import SummaryWriter
 
 parser = argparse.ArgumentParser(description='MODE Fusion training')
@@ -126,7 +129,7 @@ def train(depthes, confs, rgbs, gt):
     gt = gt.cuda()
 
   #---------
-  mask = gt < args.maxdepth
+  mask = gt <= args.maxdepth  # includes sky area, to exclude sky set mask=gt<args.maxdepth
   mask.detach_()
   #----
 
@@ -155,7 +158,7 @@ def val(depthes, confs, rgbs, gt):
     gt = gt.cuda()
 
   #---------
-  mask = gt < args.maxdepth
+  mask = gt <= args.maxdepth
   #----
 
   with torch.no_grad():
@@ -175,6 +178,9 @@ def val(depthes, confs, rgbs, gt):
   eval_metrics.append(evaluation.delta_acc(2, pred[mask], gt[mask]))
   eval_metrics.append(evaluation.delta_acc(3, pred[mask], gt[mask]))
 
+  # round float
+  eval_metrics = [np.round(x, decimals=6) for x in eval_metrics]
+
   return np.array(eval_metrics)
 
 
@@ -191,6 +197,7 @@ def main():
   writer = SummaryWriter(log_path, purge_step=args.epoch_start)
 
   start_full_time = time.time()
+  min_mae, ep_id = 1e9 + 7, -1
   for epoch in range(0, args.epochs):
     print('This is %d-th epoch' % (epoch + args.epoch_start))
     total_train_loss = 0
@@ -226,6 +233,10 @@ def main():
     writer.add_scalar('SqRel', eval_metrics[3], epoch + args.epoch_start)
     writer.add_scalar('SILog', eval_metrics[4], epoch + args.epoch_start)
     writer.add_scalar('δ1', eval_metrics[5], epoch + args.epoch_start)
+    if eval_metrics[0] < min_mae:
+      min_mae = eval_metrics[0]
+      ep_id = epoch
+    print("min MAE :{}, at epoch {}".format(min_mae, ep_id))
 
   print('full training time = %.2f HR' % ((time.time() - start_full_time) / 3600))
 
