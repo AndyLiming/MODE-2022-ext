@@ -31,12 +31,13 @@ parser.add_argument('--soiled', action='store_true', default=False, help='test f
 parser.add_argument('--resize', action='store_true', default=False, help='resize the input by downsampling to 1/2 of its original size')
 parser.add_argument('--datapath-input', default='./outputs/Deep360PredDepth/', help='the path of the input of stage2, which is just the output of stage1')
 parser.add_argument('--datapath-dataset', default='../../datasets/Deep360/', help='the path of the dataset')
-parser.add_argument('--outpath', default='./outputs/MODE_Fusion_output_soiled/', help='the output path for fusion results')
 parser.add_argument('--batch-size', type=int, default=1, help='batch size')
+parser.add_argument('--outpath', type=str, default='./outputs/MODE_Fusion_Output_Cassini', help='the output path for fusion results')
 parser.add_argument('--num_view', type=int, default=4, help='num of views in fusion')
 parser.add_argument('--loadmodel', default=None, help='load model path')
-parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA')
+parser.add_argument('--no_cuda', action='store_true', default=False, help='disables CUDA')
 parser.add_argument('--seed', type=int, default=1, metavar='S', help='random seed (default: 1)')
+
 args = parser.parse_args()
 args.cuda = not args.no_cuda and torch.cuda.is_available()
 
@@ -46,12 +47,15 @@ if args.cuda:
 
 if args.dbname == 'Deep360':
   test_depthes, test_confs, test_rgbs, test_gt = lt.list_deep360_fusion_test(args.datapath_input, args.datapath_dataset, args.soiled)
+  test_depthes, test_confs, test_rgbs = select_deep360_views(test_depthes, test_confs, test_rgbs, args.num_view)
+  d_channel = args.num_view * (args.num_view - 1)  # depth channel = 2 * C(n,2)=2*n*(n-1)/2=n*(n-1)
+  c_channel = 3 * args.num_view  # color channel = 3 * n
 
 if args.model == 'Baseline':
   model = Baseline(args.maxdepth)
 elif args.model == 'ModeFusion':
   if args.dbname == 'Deep360':
-    model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': 12, 'rgb': 12})
+    model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': d_channel, 'rgb': c_channel})
 else:
   print('no model')
 
@@ -90,7 +94,7 @@ def test(depthes, confs, rgbs, gt):
   gt = cassini2Equirec(gt.unsqueeze(1))
 
   #---------
-  mask = gt <= args.maxdepth
+  mask = gt <= args.maxdepth  # includes sky area, to exclude sky set mask=gt<args.maxdepth
   #----
   eval_metrics = []
   eval_metrics.append(evaluation.mae(pred[mask], gt[mask]))
