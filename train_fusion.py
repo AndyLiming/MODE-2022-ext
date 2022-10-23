@@ -13,6 +13,7 @@ import time
 import math
 from dataloader import list_file as lt
 from dataloader import deep360_loader as DA
+from dataloader import Dataset3D60Fusion_3view  # 3D60 fusion 3 views
 from models import Baseline, ModeFusion
 from utils import evaluation
 import prettytable as pt
@@ -65,34 +66,54 @@ if args.cuda:
 
 if args.dbname == 'Deep360':
   train_depthes, train_confs, train_rgbs, train_gt, val_depthes, val_confs, val_rgbs, val_gt = lt.list_deep360_fusion_train(args.datapath_input, args.datapath_dataset, args.soiled)
+  # select inputs based on num of views
+  train_depthes, train_confs, train_rgbs = select_deep360_views(train_depthes, train_confs, train_rgbs, args.num_view)
+  val_depthes, val_confs, val_rgbs = select_deep360_views(val_depthes, val_confs, val_rgbs, args.num_view)
 
-# select inputs based on num of views
-train_depthes, train_confs, train_rgbs = select_deep360_views(train_depthes, train_confs, train_rgbs, args.num_view)
-val_depthes, val_confs, val_rgbs = select_deep360_views(val_depthes, val_confs, val_rgbs, args.num_view)
+  d_channel = args.num_view * (args.num_view - 1)  # depth channel = 2 * C(n,2)=2*n*(n-1)/2=n*(n-1)
+  c_channel = 3 * args.num_view  # color channel = 3 * n
+  print("num of views: {}. Depth channel: {}. Color channel: {}".format(args.num_view, d_channel, c_channel))
+  print("train. len depth: {}, len confs: {}, len colors: {}".format(len(train_depthes), len(train_confs), len(train_rgbs)))
+  print("val. len depth: {}, len confs: {}, len colors: {}".format(len(val_depthes), len(val_confs), len(val_rgbs)))
 
-d_channel = args.num_view * (args.num_view - 1)  # depth channel = 2 * C(n,2)=2*n*(n-1)/2=n*(n-1)
-c_channel = 3 * args.num_view  # color channel = 3 * n
-print("num of views: {}. Depth channel: {}. Color channel: {}".format(args.num_view, d_channel, c_channel))
-print("train. len depth: {}, len confs: {}, len colors: {}".format(len(train_depthes), len(train_confs), len(train_rgbs)))
-print("val. len depth: {}, len confs: {}, len colors: {}".format(len(val_depthes), len(val_confs), len(val_rgbs)))
+  TrainImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(train_depthes,
+                                                                       train_confs,
+                                                                       train_rgbs,
+                                                                       train_gt,
+                                                                       resize=args.resize,
+                                                                       training=True),
+                                               batch_size=args.batch_size,
+                                               shuffle=True,
+                                               num_workers=args.batch_size,
+                                               drop_last=False)
 
-TrainImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(train_depthes,
-                                                                     train_confs,
-                                                                     train_rgbs,
-                                                                     train_gt,
-                                                                     resize=args.resize,
-                                                                     training=True),
-                                             batch_size=args.batch_size,
-                                             shuffle=True,
-                                             num_workers=args.batch_size,
+  ValImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(val_depthes,
+                                                                     val_confs,
+                                                                     val_rgbs,
+                                                                     val_gt,
+                                                                     resize=False,
+                                                                     training=False),
+                                             batch_size=8,
+                                             shuffle=False,
+                                             num_workers=8,
                                              drop_last=False)
+elif args.dbname == '3D60':
+  os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
+  train_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_train.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='training')
+  val_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_val.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='validation')
+  TrainImgLoader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.batch_size, drop_last=False)
+  ValImgLoader = torch.utils.data.DataLoader(val_data, batch_size=8, shuffle=False, num_workers=8, drop_last=False)
 
-ValImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(val_depthes, val_confs, val_rgbs, val_gt, resize=False, training=False), batch_size=8, shuffle=False, num_workers=8, drop_last=False)
+  d_channel = 3 * 2 * 2
+  c_channel = 3 * 3
+  print("Depth channel: {}. Color channel: {}".format(d_channel, c_channel))
 
 if args.model == 'Baseline':
   model = Baseline(args.maxdepth)
 elif args.model == 'ModeFusion':
   if args.dbname == 'Deep360':
+    model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': d_channel, 'rgb': c_channel})
+  elif args.dbname == '3D60':
     model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': d_channel, 'rgb': c_channel})
 else:
   print('no model')
@@ -177,10 +198,6 @@ def val(depthes, confs, rgbs, gt):
   eval_metrics.append(evaluation.delta_acc(1, pred[mask], gt[mask]))
   eval_metrics.append(evaluation.delta_acc(2, pred[mask], gt[mask]))
   eval_metrics.append(evaluation.delta_acc(3, pred[mask], gt[mask]))
-
-  # round float
-  eval_metrics = [np.round(x, decimals=6) for x in eval_metrics]
-
   return np.array(eval_metrics)
 
 
@@ -222,6 +239,7 @@ def main():
       total_eval_metrics += eval_metrics
 
     eval_metrics = total_eval_metrics / len(ValImgLoader)
+    eval_metrics = np.around(eval_metrics, decimals=6)
     tb = pt.PrettyTable()
     tb.field_names = ["MAE", "RMSE", "AbsRel", "SqRel", "SILog", "δ1 (%)", "δ2 (%)", "δ3 (%)"]
     tb.add_row(list(eval_metrics))
