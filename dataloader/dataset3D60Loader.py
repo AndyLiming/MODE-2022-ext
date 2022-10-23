@@ -584,8 +584,8 @@ class Dataset3D60Fusion_3view(Dataset):
     leftDepth = np.array(cv2.imread(depth, cv2.IMREAD_ANYDEPTH)).astype(np.float32)
     leftDepth = erp2rect_cassini(leftDepth, R, self.height, self.width, devcice='cpu')
 
-    rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
-    R = cv2.Rodrigues(rotate_vector)[0]
+    # rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
+    # R = cv2.Rodrigues(rotate_vector)[0]
     upRGB = np.array(Image.open(up).convert('RGB'))
     upRGB = erp2rect_cassini(upRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
     rgbs.append(self.processed(leftRGB))
@@ -682,7 +682,7 @@ if __name__ == '__main__':
   #   maxDisp = max(maxDisp, torch.max(batch['dispMap']))
   # print(maxDisp)
   # NOTE: test 3D60 fusion
-  da = Dataset3D60Fusion_3view(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', inputDir='../outputs/pred_3D60/', curStage='validation')
+  da = Dataset3D60Fusion_3view(filenamesFile='./3d60_test.txt', rootDir='../../../datasets/3D60/', inputDir='../outputs/pred_3D60/', curStage='testing')
   myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
   for id, [depth_name, depths, confs, rgbs, gt] in enumerate(tqdm(myDL, desc='Train iter')):
     print(depth_name)
@@ -690,5 +690,13 @@ if __name__ == '__main__':
     print("confs: ", len(confs), confs[0].shape)
     print("rgbs: ", len(rgbs), rgbs[0].shape)
     print("gt: ", gt.shape)
+    for i in range(len(depths)):
+      d = (depths[i] - torch.min(depths[i])) / (torch.max(depths[i]) - torch.min(depths[i]))
+      torchvision.utils.save_image(d, str(id) + '_depth_' + str(i) + '.png')
+      torchvision.utils.save_image(confs[i], str(id) + '_conf_' + str(i) + '.png')
+    for i in range(len(rgbs)):
+      img = rgbs[i].squeeze().numpy().transpose((1, 2, 0))
+      img = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
+      cv2.imwrite(str(id) + '_rgb_' + str(i) + '.png', img)
     if id > 5:
       break
