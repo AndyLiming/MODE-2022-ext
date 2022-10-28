@@ -1,3 +1,4 @@
+#python train_fusion.py --dbname 3D60 --maxdepth 20.0 --datapath-input ./outputs/pred_3D60/ --datapath-dataset ../../datasets/3D60/ --loadmodel ./checkpoints/fusion/ModeFusion/3D60/ckpt_fusion_4views_epoch38_best.tar --epoch-start 39
 from __future__ import print_function
 import argparse
 from ast import arg
@@ -19,6 +20,7 @@ from utils import evaluation
 import prettytable as pt
 
 from utils.geometry import cassini2Equirec  # val erp projection
+from utils.geometry import erp2rect_cassini
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -99,10 +101,10 @@ if args.dbname == 'Deep360':
                                              drop_last=False)
 elif args.dbname == '3D60':
   os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
-  train_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_train.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='training')
-  val_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_val.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='validation')
-  TrainImgLoader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=args.batch_size, drop_last=False)
-  ValImgLoader = torch.utils.data.DataLoader(val_data, batch_size=8, shuffle=False, num_workers=8, drop_last=False)
+  train_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_train.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='training', maxDepth=args.maxdepth)
+  val_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_val.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='validation', maxDepth=args.maxdepth)
+  TrainImgLoader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, num_workers=2, drop_last=False)
+  ValImgLoader = torch.utils.data.DataLoader(val_data, batch_size=4, shuffle=False, num_workers=4, drop_last=False)
 
   d_channel = 3 * 2 * 2
   c_channel = 3 * 3
@@ -133,7 +135,7 @@ optimizer = optim.Adam(model.parameters(), lr=0.001, betas=(0.9, 0.999))
 
 
 def silog_loss(lamda, pred, gt):
-  mask1 = gt > 0
+  mask1 = (gt > 0) & (gt <= args.maxdepth)
   mask2 = pred > 0
   mask = mask1 * mask2
   d = torch.log(pred[mask]) - torch.log(gt[mask])
@@ -151,6 +153,7 @@ def train(depthes, confs, rgbs, gt):
 
   #---------
   mask = gt <= args.maxdepth  # includes sky area, to exclude sky set mask=gt<args.maxdepth
+  #mask = (gt <= args.maxdepth) & (gt > 0) & (~torch.isnan(gt)) & (~torch.isinf(gt))
   mask.detach_()
   #----
 
@@ -180,6 +183,7 @@ def val(depthes, confs, rgbs, gt):
 
   #---------
   mask = gt <= args.maxdepth
+  #mask = (gt <= args.maxdepth) & (gt > 0) & (~torch.isnan(gt)) & (~torch.isinf(gt))
   #----
 
   with torch.no_grad():
@@ -253,7 +257,7 @@ def main():
     writer.add_scalar('δ1', eval_metrics[5], epoch + args.epoch_start)
     if eval_metrics[0] < min_mae:
       min_mae = eval_metrics[0]
-      ep_id = epoch
+      ep_id = epoch + args.epoch_start
     print("min MAE :{}, at epoch {}".format(min_mae, ep_id))
 
   print('full training time = %.2f HR' % ((time.time() - start_full_time) / 3600))
