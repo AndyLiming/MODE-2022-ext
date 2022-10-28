@@ -17,6 +17,7 @@ import math
 import cv2
 from dataloader import list_file as lt
 from dataloader import deep360_loader as DA
+from dataloader import Dataset3D60Fusion_3view
 from models import Baseline, ModeFusion
 from utils import evaluation
 import prettytable as pt
@@ -32,7 +33,7 @@ parser.add_argument('--resize', action='store_true', default=False, help='resize
 parser.add_argument('--datapath-input', default='./outputs/Deep360PredDepth/', help='the path of the input of stage2, which is just the output of stage1')
 parser.add_argument('--datapath-dataset', default='../../datasets/Deep360/', help='the path of the dataset')
 parser.add_argument('--batch-size', type=int, default=1, help='batch size')
-parser.add_argument('--outpath', type=str, default='./outputs/MODE_Fusion_Output_Cassini', help='the output path for fusion results')
+parser.add_argument('--outpath', type=str, default='./outputs/MODE_Fusion_3D60', help='the output path for fusion results')
 parser.add_argument('--num_view', type=int, default=4, help='num of views in fusion')
 parser.add_argument('--loadmodel', default=None, help='load model path')
 parser.add_argument('--no_cuda', action='store_true', default=False, help='disables CUDA')
@@ -50,11 +51,17 @@ if args.dbname == 'Deep360':
   test_depthes, test_confs, test_rgbs = select_deep360_views(test_depthes, test_confs, test_rgbs, args.num_view)
   d_channel = args.num_view * (args.num_view - 1)  # depth channel = 2 * C(n,2)=2*n*(n-1)/2=n*(n-1)
   c_channel = 3 * args.num_view  # color channel = 3 * n
+elif args.dbname == '3D60':
+  test_data = Dataset3D60Fusion_3view(filenamesFile='./dataloader/3d60_test.txt', rootDir=args.datapath_dataset, inputDir=args.datapath_input, curStage='testing')
+  d_channel = 3 * 2 * 2
+  c_channel = 3 * 3
 
 if args.model == 'Baseline':
   model = Baseline(args.maxdepth)
 elif args.model == 'ModeFusion':
   if args.dbname == 'Deep360':
+    model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': d_channel, 'rgb': c_channel})
+  if args.dbname == '3D60':
     model = ModeFusion(args.maxdepth, [32, 64, 128, 256], {'depth': d_channel, 'rgb': c_channel})
 else:
   print('no model')
@@ -92,9 +99,11 @@ def test(depthes, confs, rgbs, gt):
   # Convert the pred depth map and gt in Cassini domain to ERP domain
   pred = cassini2Equirec(pred.unsqueeze(1))
   gt = cassini2Equirec(gt.unsqueeze(1))
+  #print(pred.min(), pred.max(), gt.min(), gt.max())
 
   #---------
   mask = gt <= args.maxdepth  # includes sky area, to exclude sky set mask=gt<args.maxdepth
+  #mask = (gt <= args.maxdepth) & (gt > 0) & (~torch.isnan(gt)) & (~torch.isinf(gt))
   #----
   eval_metrics = []
   eval_metrics.append(evaluation.mae(pred[mask], gt[mask]))
@@ -110,16 +119,19 @@ def test(depthes, confs, rgbs, gt):
 
 
 def main():
-  TestImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(test_depthes,
-                                                                      test_confs,
-                                                                      test_rgbs,
-                                                                      test_gt,
-                                                                      args.resize,
-                                                                      False),
-                                              batch_size=args.batch_size,
-                                              shuffle=False,
-                                              num_workers=args.batch_size,
-                                              drop_last=False)
+  if args.dbname == 'Deep360':
+    TestImgLoader = torch.utils.data.DataLoader(DA.Deep360DatasetFusion(test_depthes,
+                                                                        test_confs,
+                                                                        test_rgbs,
+                                                                        test_gt,
+                                                                        args.resize,
+                                                                        False),
+                                                batch_size=args.batch_size,
+                                                shuffle=False,
+                                                num_workers=args.batch_size,
+                                                drop_last=False)
+  elif args.dbname == '3D60':
+    TestImgLoader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=args.batch_size, drop_last=False)
   #------------- Check the output directories -------
   snapshot_name = osp.splitext(osp.basename(args.loadmodel))[0]
   result_dir = osp.join(args.outpath, args.dbname, snapshot_name)
@@ -138,12 +150,14 @@ def main():
     total_eval_metrics += eval_metrics
 
     for i in range(depth_pred_batch.shape[0]):
-      name = osp.splitext(osp.basename(gt_name[i]))[0]
       if args.dbname == 'Deep360':
+        name = osp.splitext(osp.basename(gt_name[i]))[0]
         ep_name = re.findall(r'ep[0-9]_', gt_name[i])[0]
         name = ep_name + name
       elif args.dbname == '3D60':
-        pass
+        ss = gt_name[i].split('/')
+        sub = ss[-3] + '_' + ss[-2] if ss[-2].startswith('area') else ss[-2]
+        name = sub + '_' + ss[-1][:-4]
 
       # save gt png
       depth_gt = gt_batch[i]
