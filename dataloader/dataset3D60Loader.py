@@ -604,7 +604,7 @@ class Dataset3D60Fusion_3view(Dataset):
       conf = cv2.imread(conf_map_name)
       confs.append(np.expand_dims((conf[:, :, 0] / 255.0).astype(np.float32), axis=0))
 
-    leftDepth[leftDepth > self.maxDepth] = 0.0
+    #leftDepth[leftDepth > self.maxDepth] = self.maxDepth  # 0.0
     # gt = np.squeeze(leftDepth, axis=-1)
     gt = np.ascontiguousarray(leftDepth, dtype=np.float32)
 
@@ -641,13 +641,6 @@ class Dataset3D60Fusion_3view(Dataset):
     roll_idx = int(-angle / (2 * np.pi) * w)
     erp2 = np.roll(erp, roll_idx, -1)
     return erp2
-
-  def __turnBack(self, leftRGB, rightRGB, rightDepth):
-    angle = np.pi
-    leftBack = self.__rotateERP(leftRGB, angle)
-    rightBack = self.__rotateERP(rightRGB, angle)
-    rightDepthBack = self.__rotateERP(rightDepth, angle)
-    return rightBack, leftBack, rightDepthBack
 
 
 if __name__ == '__main__':
@@ -689,7 +682,7 @@ if __name__ == '__main__':
     print("depths: ", len(depths), depths[0].shape)
     print("confs: ", len(confs), confs[0].shape)
     print("rgbs: ", len(rgbs), rgbs[0].shape)
-    print("gt: ", gt.shape)
+    print("gt: ", gt.shape, torch.max(gt), torch.min(gt))
     for i in range(len(depths)):
       d = (depths[i] - torch.min(depths[i])) / (torch.max(depths[i]) - torch.min(depths[i]))
       torchvision.utils.save_image(d, str(id) + '_depth_' + str(i) + '.png')
