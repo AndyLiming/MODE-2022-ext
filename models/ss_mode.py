@@ -24,7 +24,7 @@ class SphereSweepMODE(nn.Module):
     else:
       raise NotImplementedError("Convolution Type must be Regular or Sphere!")
 
-    self.multi_view_channel_conbine = nn.Sequential(nn.Conv3d(in_channels=128,
+    self.multi_view_channel_conbine = nn.Sequential(nn.Conv3d(in_channels=32 * self.numCam,
                                                               out_channels=64,
                                                               kernel_size=(1,
                                                                            1,

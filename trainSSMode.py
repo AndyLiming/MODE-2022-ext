@@ -55,6 +55,8 @@ parser.add_argument('--loadSHGonly', action='store_true', default=False, help='i
 
 parser.add_argument('--parallel', action='store_true', default=False, help='model parallel')
 
+parser.add_argument('--num_cam', type=int, default=4, help='num of cameras')
+
 parser.add_argument('--soiled', action='store_true', default=False, help='test soiled image')
 
 parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
@@ -150,6 +152,7 @@ def train(trainDispDataLoader, valDispDataLoader, model, optimizer):
   # generate projection grids
   sphereSweep = CassiniSweepViewTrans(maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
   grids = sphereSweep.genCassiniSweepGrids()
+  grids = grids[:args.num_cam]
   # start training
   for epoch in range(start_epoch + 1, args.epochs + 1):
     startTime = time.time()
@@ -161,6 +164,7 @@ def train(trainDispDataLoader, valDispDataLoader, model, optimizer):
     # Train ----------------------------------
     for batch_idx, batchData in enumerate(tqdm(trainDispDataLoader, desc='Train iter {}'.format(epoch))):
       rgbImgs = [x.cuda() for x in batchData['rgbImgs']]
+      rgbImgs = rgbImgs[:args.num_cam]
       depthGT = batchData['depthMap'].cuda()
       mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
       # for fish eye datasets
@@ -200,8 +204,9 @@ def train(trainDispDataLoader, valDispDataLoader, model, optimizer):
     counter = 0
     model.eval()
     with torch.no_grad():
-      for batch_idx, batchData in enumerate(tqdm(valDispDataLoader, desc='Train iter {}'.format(epoch))):
+      for batch_idx, batchData in enumerate(tqdm(valDispDataLoader, desc='Validation iter {}'.format(epoch))):
         rgbImgs = [x.cuda() for x in batchData['rgbImgs']]
+        rgbImgs = rgbImgs[:args.num_cam]
         depthGT = batchData['depthMap'].cuda()
         mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
         # for fish eye datasets
@@ -247,7 +252,7 @@ if args.dataset == 'Deep360':
 # -------------------------------------------------
 
 # Define models ----------------------------------------------
-model = SphereSweepMODE(conv='Sphere', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=4, numIndex=args.num_index)
+model = SphereSweepMODE(conv='Sphere', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=args.num_cam, numIndex=args.num_index)
 # ----------------------------------------------------------
 if args.parallel:
   model = nn.DataParallel(model)

@@ -48,6 +48,8 @@ parser.add_argument('--checkpoint', default=None, help='path to load checkpoint 
 
 parser.add_argument('--parallel', action='store_true', default=False, help='model parallel')
 
+parser.add_argument('--num_cam', type=int, default=4, help='num of cameras')
+
 parser.add_argument('--soiled', action='store_true', default=False, help='test soiled image')
 
 parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
@@ -132,6 +134,7 @@ def saveOutput(pred, gt, mask, rootDir, id, names=None, log=True, cons=True, sav
 def test(model, testDispDataLoader, modelNameDisp, numTestData):
   sphereSweep = CassiniSweepViewTrans(maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
   grids = sphereSweep.genCassiniSweepGrids()
+  grids = grids[:args.num_cam]
   test_metrics = ["MAE", "RMSE", "AbsRel", "SqRel", "SILog", "δ1 (%)", "δ2 (%)", "δ3 (%)"]
   total_eval_metrics = np.zeros(len(test_metrics))  # mae,rmse,px1,px3,px5,d1
   if save_out:
@@ -143,6 +146,7 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
   with torch.no_grad():
     for batch_idx, batchData in enumerate(tqdm(testDispDataLoader, desc='Test iter')):
       rgbImgs = [x.cuda() for x in batchData['rgbImgs']]
+      rgbImgs = rgbImgs[:args.num_cam]
       #print(torch.max(rgbImgs[0]), torch.min(rgbImgs[0]))
       depthGT = batchData['depthMap'].cuda()
       mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
@@ -181,7 +185,7 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
 
 def main():
   # model
-  model = SphereSweepMODE(conv='Sphere', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=4, numIndex=args.num_index)
+  model = SphereSweepMODE(conv='Sphere', in_height=args.height, in_width=args.width, sphereType='Cassini', numCam=args.num_cam, numIndex=args.num_index)
   if (args.parallel):
     model = nn.DataParallel(model)
   if args.cuda:
