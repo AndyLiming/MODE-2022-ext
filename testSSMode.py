@@ -85,7 +85,6 @@ def saveOutputOriValue(pred, gt, mask, rootDir, id, names=None, cons=True):
       if isinstance(oriName, list) or isinstance(oriName, tuple):
         oriName = oriName[0]
       oriName = oriName.replace(args.dataset_root, '')
-      oriName = oriName.replace(args.intermedia_path, '')
       oriName = oriName.replace('../', '')
       oriName = oriName.replace('./', '')
       oriName = oriName.replace('/', '+')
@@ -172,7 +171,7 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
       eval_metrics.append(evaluation.delta_acc(3, output_pred[mask], depthGT[mask]))
       if save_out:
         if args.save_ori: saveOutputOriValue(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'])  # save npz
-        saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'], log=True)
+        saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'], log=True,savewithGt=False)
       total_eval_metrics += eval_metrics
     mean_errors = total_eval_metrics / len(testDispDataLoader)
     mean_errors = ['{:^.4f}'.format(x) for x in mean_errors]

@@ -647,49 +647,50 @@ if __name__ == '__main__':
   from tqdm import tqdm
   os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
   # NOTE: test 3D60 disparity
-  # da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', curStage='validation', shape=(512, 256), crop=False, pair='lr', flip=False, maxDepth=20.0)
-  # myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
-  # maxDisp = 0
-  # for id, batch in enumerate(tqdm(myDL, desc='Train iter')):
-  #   if id < 5:
-  #     if random.random() < 0.5:
-  #       left = batch['leftImg']
-  #       right = batch['rightImg']
-  #       disp = batch['dispMap']
-  #     else:
-  #       left = batch['leftImg_flip']
-  #       right = batch['rightImg_flip']
-  #       disp = batch['dispMap_flip']
-  #     print(disp.shape)
-  #     print(torch.max(left), torch.min(left), torch.max(right), torch.min(right))
-  #     disp[torch.isnan(disp)] = 0.0
-  #     disp[(disp > 192)] = 0.0
-  #     print(torch.max(disp), torch.min(disp))
-  #     disp = (disp - torch.min(disp)) / (torch.max(disp) - torch.min(disp))
-  #     left = (left - torch.min(left)) / (torch.max(left) - torch.min(left))
-  #     right = (right - torch.min(right)) / (torch.max(right) - torch.min(right))
-  #     torchvision.utils.save_image(left, 'ca_{}_l.png'.format(str(id)))
-  #     torchvision.utils.save_image(right, 'ca_{}_r.png'.format(str(id)))
-  #     torchvision.utils.save_image(disp, 'ca_{}_disp.png'.format(str(id)))
-  #   # test output disparity
-  #   maxDisp = max(maxDisp, torch.max(batch['dispMap']))
-  # print(maxDisp)
-  # NOTE: test 3D60 fusion
-  da = Dataset3D60Fusion_3view(filenamesFile='./3d60_test.txt', rootDir='../../../datasets/3D60/', inputDir='../outputs/pred_3D60/', curStage='testing')
+  da = Dataset3D60Disparity(filenamesFile='./3d60_val.txt', rootDir='../../../datasets/3D60/', curStage='validation', shape=(512, 256), crop=False, pair='all', flip=False, maxDepth=20.0)
   myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
-  for id, [depth_name, depths, confs, rgbs, gt] in enumerate(tqdm(myDL, desc='Train iter')):
-    print(depth_name)
-    print("depths: ", len(depths), depths[0].shape)
-    print("confs: ", len(confs), confs[0].shape)
-    print("rgbs: ", len(rgbs), rgbs[0].shape)
-    print("gt: ", gt.shape, torch.max(gt), torch.min(gt))
-    for i in range(len(depths)):
-      d = (depths[i] - torch.min(depths[i])) / (torch.max(depths[i]) - torch.min(depths[i]))
-      torchvision.utils.save_image(d, str(id) + '_depth_' + str(i) + '.png')
-      torchvision.utils.save_image(confs[i], str(id) + '_conf_' + str(i) + '.png')
-    for i in range(len(rgbs)):
-      img = rgbs[i].squeeze().numpy().transpose((1, 2, 0))
-      img = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
-      cv2.imwrite(str(id) + '_rgb_' + str(i) + '.png', img)
-    if id > 5:
-      break
+  maxDisp = 0
+  for id, batch in enumerate(tqdm(myDL, desc='Train iter')):
+    if id < 10:
+      if random.random() < 0.5:
+        left = batch['leftImg']
+        right = batch['rightImg']
+        disp = batch['dispMap']
+      else:
+        left = batch['leftImg_flip']
+        right = batch['rightImg_flip']
+        disp = batch['dispMap_flip']
+      print(disp.shape)
+      print(torch.max(left), torch.min(left), torch.max(right), torch.min(right))
+      disp[torch.isnan(disp)] = 0.0
+      disp[(disp > 192)] = 0.0
+      print(torch.max(disp), torch.min(disp))
+      disp = (disp - torch.min(disp)) / (torch.max(disp) - torch.min(disp))
+      left = (left - torch.min(left)) / (torch.max(left) - torch.min(left))
+      right = (right - torch.min(right)) / (torch.max(right) - torch.min(right))
+      torchvision.utils.save_image(left, 'ca_{}_l.png'.format(str(id)))
+      torchvision.utils.save_image(right, 'ca_{}_r.png'.format(str(id)))
+      torchvision.utils.save_image(disp, 'ca_{}_disp.png'.format(str(id)))
+    # test output disparity
+    maxDisp = max(maxDisp, torch.max(batch['dispMap']))
+  print(maxDisp)
+
+  # # NOTE: test 3D60 fusion
+  # da = Dataset3D60Fusion_3view(filenamesFile='./3d60_test.txt', rootDir='../../../datasets/3D60/', inputDir='../outputs/pred_3D60/', curStage='testing')
+  # myDL = torch.utils.data.DataLoader(da, batch_size=1, num_workers=1, pin_memory=False, shuffle=False)
+  # for id, [depth_name, depths, confs, rgbs, gt] in enumerate(tqdm(myDL, desc='Train iter')):
+  #   print(depth_name)
+  #   print("depths: ", len(depths), depths[0].shape)
+  #   print("confs: ", len(confs), confs[0].shape)
+  #   print("rgbs: ", len(rgbs), rgbs[0].shape)
+  #   print("gt: ", gt.shape, torch.max(gt), torch.min(gt))
+  #   for i in range(len(depths)):
+  #     d = (depths[i] - torch.min(depths[i])) / (torch.max(depths[i]) - torch.min(depths[i]))
+  #     torchvision.utils.save_image(d, str(id) + '_depth_' + str(i) + '.png')
+  #     torchvision.utils.save_image(confs[i], str(id) + '_conf_' + str(i) + '.png')
+  #   for i in range(len(rgbs)):
+  #     img = rgbs[i].squeeze().numpy().transpose((1, 2, 0))
+  #     img = ((img - img.min()) / (img.max() - img.min()) * 255).astype(np.uint8)
+  #     cv2.imwrite(str(id) + '_rgb_' + str(i) + '.png', img)
+  #   if id > 5:
+  #     break
