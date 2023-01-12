@@ -581,8 +581,8 @@ class Dataset3D60Fusion_3view(Dataset):
     leftRGB = erp2rect_cassini(leftRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
     rightRGB = erp2rect_cassini(rightRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
 
-    leftDepth = np.array(cv2.imread(depth, cv2.IMREAD_ANYDEPTH)).astype(np.float32)
-    leftDepth = erp2rect_cassini(leftDepth, R, self.height, self.width, devcice='cpu')
+    leftDepth_erp = np.array(cv2.imread(depth, cv2.IMREAD_ANYDEPTH)).astype(np.float32)
+    leftDepth = erp2rect_cassini(leftDepth_erp, R, self.height, self.width, devcice='cpu')
 
     # rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
     # R = cv2.Rodrigues(rotate_vector)[0]
@@ -608,11 +608,156 @@ class Dataset3D60Fusion_3view(Dataset):
     # gt = np.squeeze(leftDepth, axis=-1)
     gt = np.ascontiguousarray(leftDepth, dtype=np.float32)
 
+    #gt_erp = np.ascontiguousarray(leftDepth_erp, dtype=np.float32)
+
     leftRGB = leftRGB.astype(np.uint8)
     rightRGB = rightRGB.astype(np.uint8)
 
     #leftDepth = torch.from_numpy(leftDepth).unsqueeze_(0)
     return depth, depths, confs, rgbs, gt  # gt name, input depth, confs, rgbs, gt
+
+  def __genCassiniPhiMap(self):
+    phi_l_start = 0.5 * np.pi - (0.5 * np.pi / self.width)
+    phi_l_end = -0.5 * np.pi
+    phi_l_step = np.pi / self.width
+    phi_l_range = np.arange(phi_l_start, phi_l_end, -phi_l_step)
+    phi_l_map = np.array([phi_l_range for j in range(self.height)]).astype(np.float32)
+    return phi_l_map
+
+  def __depth2disp(self, depthMap):
+    mask_depth_0 = depthMap == 0
+    invMask = (depthMap <= 0) | (depthMap > self.maxDepth)
+    depth_not_0 = np.ma.array(depthMap, mask=invMask)
+    phi_l_map = self.phiMap
+    disp = self.width * (np.arcsin(
+        np.clip(
+            (depth_not_0 * np.sin(phi_l_map) + self.baseline) / np.sqrt(depth_not_0 * depth_not_0 + self.baseline * self.baseline - 2 * depth_not_0 * self.baseline * np.cos(phi_l_map + np.pi / 2)),
+            -1,
+            1)) - phi_l_map) / np.pi
+    disp = disp.filled(np.nan)
+    disp[disp < 0] = 0
+    return disp
+
+  def __rotateERP(self, erp, angle):
+    w = erp.shape[-1]  # input erp image shape: c*h*w
+    roll_idx = int(-angle / (2 * np.pi) * w)
+    erp2 = np.roll(erp, roll_idx, -1)
+    return erp2
+
+
+class Dataset3D60Ssmode(Dataset):
+  #360D Dataset#
+  # fusion of all 3 views (lr_l,lr_r,ud_u,ud_d,ur_u,ur_r)
+  def __init__(
+      self,
+      filenamesFile,
+      rootDir='../../datasets/3D60/',  #rgb, disp,depth 
+      inputDir='',  #depth from disparity stage
+      curStage='training',
+      shape=(512, 256),
+      maxDepth=20.0,
+      view='Center_Left_Down/'):  # 3D60 is a indoor dataset and set max depth as 20 meters
+    #########################################################################################################
+    # Arguments:
+    # -filenamesFile: Absolute path to the aforementioned filenames .txt file
+    # -transform    : (Optional) transform to be applied on a sample
+    # -mode         : Dataset mode. Available options: mono, lr (Left-Right), ud (Up-Down), tc (Trinocular)
+    # -dataType     : type of input imgs. 'erp' = Equirectangular projection, 'sphere' = s2 signal, 'all' = both type
+    #########################################################################################################
+    # Initialization
+    super(Dataset3D60Ssmode, self).__init__()
+    # Assertion
+    assert curStage in splits
+    assert (rootDir is not None) and (rootDir != '')
+
+    assert view in ['Center_Left_Down/', 'Right/', 'Up/']
+    # Member variable assignment
+    self.rootDir = rootDir
+    self.inputDir = inputDir
+    self.curStage = curStage
+    self.height, self.width = shape
+
+    self.filenamesFile = filenamesFile
+    self.baseline = 0.26  # left-right baseline
+    self.maxDepth = maxDepth
+
+    # rgb and gt depth dir
+    self.prefix_l = os.path.join(self.rootDir, 'Center_Left_Down/')
+    self.prefix_r = os.path.join(self.rootDir, 'Right/')
+    self.prefix_u = os.path.join(self.rootDir, 'Up/')
+
+    self.view = view
+
+    self.processed = preprocess.get_transform_stage1(augment=False)  # transform of rgb images
+    self.processed_depth = preprocess.get_transform_stage2()
+
+    # self.cddt = CassiniDepthDispTransformer(height=self.height, width=self.width, maxDisp, maxDepth, baseline, device='cuda')
+
+    # get file names
+    self.fileNameList = self.__getFileList()
+    self.phiMap = self.__genCassiniPhiMap()
+
+    print("Dataset 3D60: Multi-views fish eye dataset. File list: {}. Num of files: {}. root dir: {}.".format(self.filenamesFile, len(self.fileNameList), self.rootDir))
+
+  def __len__(self):
+    return len(self.fileNameList)
+
+  def __getFileList(self):
+    fileNameList = []
+    with open(self.filenamesFile) as f:
+      lines = f.readlines()
+      for line in lines:
+        fileNameList.append(line.strip().split(" "))  # split by space
+    return fileNameList
+
+  def __getitem__(self, index):  #return data in disparity estimation task
+    assert (self.fileNameList is not None) and (len(self.fileNameList) > 0)
+    name = self.fileNameList[index]
+    # left/down
+    leftName = os.path.join(self.prefix_l, name[0][2:])
+    leftDepthName = os.path.join(self.prefix_l, name[3][2:])
+
+    # right
+    rightName = os.path.join(self.prefix_r, name[1][2:])
+    rightDepthName = os.path.join(self.prefix_r, name[4][2:])
+    # up
+    upName = os.path.join(self.prefix_u, name[2][2:])
+    upDepthName = os.path.join(self.prefix_u, name[5][2:])
+
+    left = leftName
+    right = rightName
+    up = upName
+    depth = leftDepthName
+
+    # RGB:
+    rgbs = []
+    rotate_vector = np.array([0, 0, 0]).astype(np.float32)
+    R = cv2.Rodrigues(rotate_vector)[0]
+    leftRGB = np.array(Image.open(left).convert('RGB'))
+    rightRGB = np.array(Image.open(right).convert('RGB'))
+    leftRGB = erp2rect_cassini(leftRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
+    rightRGB = erp2rect_cassini(rightRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
+
+    leftDepth_erp = np.array(cv2.imread(depth, cv2.IMREAD_ANYDEPTH)).astype(np.float32)
+    leftDepth = erp2rect_cassini(leftDepth_erp, R, self.height, self.width, devcice='cpu')
+
+    # rotate_vector = np.array([0, 0, -np.pi / 2]).astype(np.float32)
+    # R = cv2.Rodrigues(rotate_vector)[0]
+    upRGB = np.array(Image.open(up).convert('RGB'))
+    upRGB = erp2rect_cassini(upRGB, R, self.height, self.width, devcice='cpu').astype(np.uint8)
+    rgbs.append(self.processed(leftRGB))
+    rgbs.append(self.processed(rightRGB))
+    rgbs.append(self.processed(upRGB))
+
+    # leftDepth[leftDepth > self.maxDepth] = self.maxDepth  # 0.0
+    # gt = np.squeeze(leftDepth, axis=-1)
+    gt = np.ascontiguousarray(leftDepth, dtype=np.float32)
+    gt = torch.from_numpy(gt).unsqueeze(0)
+
+    gt_erp = np.ascontiguousarray(leftDepth_erp, dtype=np.float32)
+    gt_erp = torch.from_numpy(gt_erp).unsqueeze(0)
+    data = {'rgbImgs': rgbs, 'depthMap': gt, 'depthMapERP': gt_erp, 'depthName': leftDepthName}
+    return data
 
   def __genCassiniPhiMap(self):
     phi_l_start = 0.5 * np.pi - (0.5 * np.pi / self.width)
