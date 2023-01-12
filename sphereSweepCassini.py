@@ -41,6 +41,36 @@ defaultConfigs = {
          0]
     ]
 }
+# extrinsics of cameras 3D60
+ext3D60Configs = {
+    'height': 512,
+    'width': 256,
+    'cam_nums': 3,
+    'extrinsics': [
+        #y,z,x,pitch,yaw,roll
+        #1 : left
+        [0,
+         0,
+         0,
+         0,
+         0,
+         0],
+        #2 : right
+        [0,
+         0,
+         -0.26,
+         0,
+         0,
+         0],
+        #3 : up
+        [0.26,
+         0,
+         0,
+         0,
+         0,
+         0]
+    ]
+}
 
 
 class CassiniSweepViewTrans():
