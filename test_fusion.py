@@ -33,7 +33,7 @@ parser.add_argument('--resize', action='store_true', default=False, help='resize
 parser.add_argument('--datapath-input', default='./outputs/Deep360PredDepth/', help='the path of the input of stage2, which is just the output of stage1')
 parser.add_argument('--datapath-dataset', default='../../datasets/Deep360/', help='the path of the dataset')
 parser.add_argument('--batch-size', type=int, default=1, help='batch size')
-parser.add_argument('--outpath', type=str, default='./outputs/MODE_Fusion_3D60', help='the output path for fusion results')
+parser.add_argument('--outpath', type=str, default='./outputs/MODE_Fusion_3D60_3views', help='the output path for fusion results')
 parser.add_argument('--num_view', type=int, default=4, help='num of views in fusion')
 parser.add_argument('--loadmodel', default=None, help='load model path')
 parser.add_argument('--no_cuda', action='store_true', default=False, help='disables CUDA')
