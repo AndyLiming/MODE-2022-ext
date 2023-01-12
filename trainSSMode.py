@@ -23,9 +23,9 @@ from tqdm import tqdm
 from models import SphereSweepMODE, loadStackHourglassOnly
 
 from utils import evaluation
-from dataloader import list_deep360_ssmode_train, Deep360DatasetSsmode
+from dataloader import list_deep360_ssmode_train, Deep360DatasetSsmode, Dataset3D60Ssmode
 
-from sphereSweepCassini import CassiniSweepViewTrans
+from sphereSweepCassini import CassiniSweepViewTrans, ext3D60Configs
 '''
 Argument Definition
 '''
@@ -68,7 +68,7 @@ parser.add_argument('--seed', type=int, default=123, metavar='S', help='random s
 parser.add_argument('--save_checkpoint_path', default='./checkpoints/disp/', help='save checkpoint path')
 
 args = parser.parse_args()
-
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
 print("Training!")
 print("Args:\n{}".format(args))
 # cuda & device
@@ -150,7 +150,10 @@ def train(trainDispDataLoader, valDispDataLoader, model, optimizer):
   global_step = 0
   global_val = 0
   # generate projection grids
-  sphereSweep = CassiniSweepViewTrans(maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
+  if args.dataset == 'Deep360':
+    sphereSweep = CassiniSweepViewTrans(maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
+  elif args.dataset == '3D60':
+    sphereSweep = CassiniSweepViewTrans(configs=ext3D60Configs, maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
   grids = sphereSweep.genCassiniSweepGrids()
   grids = grids[:args.num_cam]
   # start training
@@ -246,6 +249,12 @@ if args.dataset == 'Deep360':
   train_rgbs, train_gt, val_rgbs, val_gt = list_deep360_ssmode_train(args.dataset_root, soiled=args.soiled)
   trainDispData = Deep360DatasetSsmode(rgbs=train_rgbs, gt=train_gt, resize=False)
   valDispData = Deep360DatasetSsmode(rgbs=val_rgbs, gt=val_gt, resize=False)
+  print("Num of training data:{}. Num of validation data:{}".format(len(trainDispData), len(valDispData)))
+  trainDispDataLoader = torch.utils.data.DataLoader(trainDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=True)
+  valDispDataLoader = torch.utils.data.DataLoader(valDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=False)
+elif args.dataset == '3D60':
+  trainDispData = Dataset3D60Ssmode(filenamesFile='./dataloader/3d60_train.txt', rootDir=args.dataset_root, curStage='training')
+  valDispData = Dataset3D60Ssmode(filenamesFile='./dataloader/3d60_val.txt', rootDir=args.dataset_root, curStage='validation')
   print("Num of training data:{}. Num of validation data:{}".format(len(trainDispData), len(valDispData)))
   trainDispDataLoader = torch.utils.data.DataLoader(trainDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=True)
   valDispDataLoader = torch.utils.data.DataLoader(valDispData, batch_size=args.batch_size, num_workers=4, pin_memory=False, shuffle=False)

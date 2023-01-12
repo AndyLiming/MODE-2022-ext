@@ -23,9 +23,9 @@ import prettytable as pt
 from models import SphereSweepMODE
 
 from utils import evaluation
-from dataloader import list_deep360_ssmode_test, Deep360DatasetSsmode
+from dataloader import list_deep360_ssmode_test, Deep360DatasetSsmode, Dataset3D60Ssmode
 
-from sphereSweepCassini import CassiniSweepViewTrans
+from sphereSweepCassini import CassiniSweepViewTrans, ext3D60Configs
 
 from utils.geometry import cassini2Equirec
 
@@ -59,7 +59,7 @@ parser.add_argument('--save_ori', action='store_true', default=False, help='save
 # saving
 
 args = parser.parse_args()
-
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"  # enable openexr
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 heightC, widthC = args.height, args.width
@@ -131,7 +131,11 @@ def saveOutput(pred, gt, mask, rootDir, id, names=None, log=True, cons=True, sav
 
 
 def test(model, testDispDataLoader, modelNameDisp, numTestData):
-  sphereSweep = CassiniSweepViewTrans(maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
+  # generate projection grids
+  if args.dataset == 'Deep360':
+    sphereSweep = CassiniSweepViewTrans(maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
+  elif args.dataset == '3D60':
+    sphereSweep = CassiniSweepViewTrans(configs=ext3D60Configs, maxDepth=args.max_depth, minDepth=0.5, numInvs=args.num_index, scaleDown=4, numInvDown=4)
   grids = sphereSweep.genCassiniSweepGrids()
   grids = grids[:args.num_cam]
   test_metrics = ["MAE", "RMSE", "AbsRel", "SqRel", "SILog", "δ1 (%)", "δ2 (%)", "δ3 (%)"]
@@ -148,7 +152,7 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
       rgbImgs = rgbImgs[:args.num_cam]
       #print(torch.max(rgbImgs[0]), torch.min(rgbImgs[0]))
       depthGT = batchData['depthMap'].cuda()
-      mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
+      #mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
       # for fish eye datasets
       b, c, h, w = rgbImgs[0].shape
       output_pred = model(rgbImgs, grids)
@@ -158,7 +162,10 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
       output_pred = cassini2Equirec(output_pred)
       depthGT = cassini2Equirec(depthGT)
       depthGT[depthGT > args.max_depth] = args.max_depth
+      #output_pred[output_pred > args.max_depth] = args.max_depth
+      #depthGT = batchData['depthMapERP'].cuda().squeeze(1)
       mask = (~torch.isnan(depthGT) & (depthGT > 0) & (depthGT <= args.max_depth))
+      #print(depthGT.shape, mask.shape, output_pred.shape)
       # compute errors
       eval_metrics = []
       eval_metrics.append(evaluation.mae(output_pred[mask], depthGT[mask]))
@@ -170,8 +177,11 @@ def test(model, testDispDataLoader, modelNameDisp, numTestData):
       eval_metrics.append(evaluation.delta_acc(2, output_pred[mask], depthGT[mask]))
       eval_metrics.append(evaluation.delta_acc(3, output_pred[mask], depthGT[mask]))
       if save_out:
-        if args.save_ori: saveOutputOriValue(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'])  # save npz
-        saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'], log=True,savewithGt=False)
+        if args.save_ori:
+          # saveOutputOriValue(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'])  # save npz
+          saveOutputOriValue(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, batch_idx, names=None)  # save npz
+        # saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, counter, names=batchData['depthName'], log=True, savewithGt=False)
+        saveOutput(output_pred.clone(), depthGT.clone(), mask, args.save_output_path, batch_idx, names=None, log=True, savewithGt=False)
       total_eval_metrics += eval_metrics
     mean_errors = total_eval_metrics / len(testDispDataLoader)
     mean_errors = ['{:^.4f}'.format(x) for x in mean_errors]
@@ -199,6 +209,9 @@ def main():
   if args.dataset == 'Deep360':  # deep 360
     test_rgbs, test_gt = list_deep360_ssmode_test(args.dataset_root, soiled=args.soiled)
     testDispData = Deep360DatasetSsmode(rgbs=test_rgbs, gt=test_gt, resize=False)
+    testDispDataLoader = torch.utils.data.DataLoader(testDispData, batch_size=args.batch_size, num_workers=args.batch_size, pin_memory=False, shuffle=False)
+  elif args.dataset == '3D60':
+    testDispData = Dataset3D60Ssmode(filenamesFile='./dataloader/3d60_test.txt', rootDir=args.dataset_root, curStage='testing')
     testDispDataLoader = torch.utils.data.DataLoader(testDispData, batch_size=args.batch_size, num_workers=args.batch_size, pin_memory=False, shuffle=False)
 
   # testing
